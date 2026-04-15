@@ -141,6 +141,26 @@ body {
 #tab-attendance, .tab-content {
     background-color: #ffffff;
 }
+
+/* Đảm bảo Popup không bao giờ vượt quá chiều cao màn hình và cho phép cuộn nội dung */
+#leaveFormPopup > div {
+    max-height: 90vh; /* Giới hạn chiều cao tối đa là 90% màn hình */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Thêm vùng cuộn cho phần chứa các ô nhập liệu */
+#leaveFormPopup .space-y-4 {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 20px;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Ẩn thanh cuộn vật lý để nhìn đẹp hơn */
+#leaveFormPopup .space-y-4::-webkit-scrollbar {
+    display: none;
+}
     </style>
 </head>
 <body>
@@ -204,57 +224,58 @@ body {
 
        <div id="tab-leave" class="tab-content p-6">
     <div id="leaveFormPopup" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end">
-        <div class="bg-white w-full rounded-t-[40px] p-8 animate-slide-up">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-black text-slate-800 uppercase italic">Đăng ký nghỉ</h3>
-                <button onclick="toggleLeaveForm(false)" class="text-slate-300 text-2xl"><i class="fas fa-times-circle"></i></button>
-            </div>
-            
-            <div class="space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Từ ngày</label>
-                        <input type="date" id="leaveFrom" class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none border border-slate-100 mt-1">
-                    </div>
-                    <div>
-                        <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Đến ngày</label>
-                        <input type="date" id="leaveTo" class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none border border-slate-100 mt-1">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
-                    <div>
-                        <label class="text-[9px] font-black text-blue-400 uppercase ml-1">Bắt đầu từ</label>
-                        <select id="startSession" class="w-full bg-transparent font-bold text-xs outline-none mt-1 text-blue-600">
-                            <option value="Sáng">Đầu buổi Sáng</option>
-                            <option value="Chiều">Đầu buổi Chiều</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-[9px] font-black text-blue-400 uppercase ml-1">Nghỉ cho hết</label>
-                        <select id="endSession" class="w-full bg-transparent font-bold text-xs outline-none mt-1 text-blue-600">
-                            <option value="Chiều">Hết buổi Chiều</option>
-                            <option value="Sáng">Hết buổi Sáng</option>
-                        </select>
-                    </div>
-                </div>
-
+    <div class="bg-white w-full rounded-t-[40px] p-8 animate-slide-up max-h-[90vh] flex flex-col">
+        
+        <div class="flex justify-between items-center mb-6 flex-shrink-0">
+            <h3 class="text-xl font-black text-slate-800 uppercase italic">Đăng ký nghỉ</h3>
+            <button onclick="toggleLeaveForm(false)" class="text-slate-300 text-2xl"><i class="fas fa-times-circle"></i></button>
+        </div>
+        
+        <div class="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-4">
+            <div class="grid grid-cols-2 gap-4">
                 <div>
-                    <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Lý do nghỉ</label>
-                    <textarea id="leaveReason" placeholder="Ví dụ: Nghỉ ốm, việc gia đình..." class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none h-20 border border-slate-100 mt-1"></textarea>
+                    <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Từ ngày</label>
+                    <input type="date" id="leaveFrom" class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none border border-slate-100 mt-1">
                 </div>
-
-                <div class="text-right px-2">
-                    <span class="text-[10px] font-bold text-slate-400 italic">Tổng cộng: </span>
-                    <span id="tempTotalDays" class="text-sm font-black text-blue-600">1.0 ngày</span>
+                <div>
+                    <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Đến ngày</label>
+                    <input type="date" id="leaveTo" class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none border border-slate-100 mt-1">
                 </div>
-
-                <button onclick="submitLeaveRequest()" class="w-full bg-blue-500 py-4 rounded-2xl text-white font-black shadow-lg uppercase active:scale-95 transition-transform">
-                    Gửi đơn phê duyệt
-                </button>
             </div>
+
+            <div class="grid grid-cols-2 gap-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                <div>
+                    <label class="text-[9px] font-black text-blue-400 uppercase ml-1">Bắt đầu từ</label>
+                    <select id="startSession" class="w-full bg-transparent font-bold text-xs outline-none mt-1 text-blue-600">
+                        <option value="Sáng">Đầu buổi Sáng</option>
+                        <option value="Chiều">Đầu buổi Chiều</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[9px] font-black text-blue-400 uppercase ml-1">Nghỉ cho hết</label>
+                    <select id="endSession" class="w-full bg-transparent font-bold text-xs outline-none mt-1 text-blue-600">
+                        <option value="Chiều">Hết buổi Chiều</option>
+                        <option value="Sáng">Hết buổi Sáng</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Lý do nghỉ</label>
+                <textarea id="leaveReason" placeholder="Ví dụ: Nghỉ ốm, việc gia đình..." class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none h-20 border border-slate-100 mt-1"></textarea>
+            </div>
+
+            <div class="text-right px-2">
+                <span class="text-[10px] font-bold text-slate-400 italic">Tổng cộng: </span>
+                <span id="tempTotalDays" class="text-sm font-black text-blue-600">1.0 ngày</span>
+            </div>
+
+            <button onclick="submitLeaveRequest()" class="w-full bg-blue-500 py-4 rounded-2xl text-white font-black shadow-lg uppercase active:scale-95 transition-transform mb-2">
+                Gửi đơn phê duyệt
+            </button>
         </div>
     </div>
+</div>
 
     <div class="bg-blue-600 p-6 rounded-[32px] text-white flex justify-between items-center shadow-xl mb-8">
         <div>

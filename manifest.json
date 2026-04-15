@@ -1,0 +1,17 @@
+{
+  "name": "HT Attendance System",
+  "short_name": "HT Attendance",
+  "description": "Hệ thống chấm công thông minh HT",
+  "start_url": "mobile.html",
+  "display": "standalone",
+  "background_color": "#ffffff", 
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "https://cameradalat.com/wp-content/uploads/2026/04/ht-cham-cong-logo-app.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

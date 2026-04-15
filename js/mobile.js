@@ -1,0 +1,457 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get, update, push, onValue, query, orderByChild, equalTo, remove } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+// --- 1. CẤU HÌNH FIREBASE ---
+const firebaseConfig = {
+    apiKey: "AIzaSyBZsNmumycpTXIshe1JvoEm7DhuQO4PiWw",
+    authDomain: "chamconght-3df64.firebaseapp.com",
+    databaseURL: "https://chamconght-3df64-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "chamconght-3df64",
+    storageBucket: "chamconght-3df64.firebasestorage.app",
+    messagingSenderId: "500919029656",
+    appId: "1:500919029656:web:8f75866b38b83e096865ed"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let currentUser = null;
+let attendHistory = [];
+let currentCalendarDate = new Date(); // Dùng để quản lý tháng đang xem trong Bảng công
+
+// --- 2. UTILS ---
+const timeToMins = (t) => {
+    if (!t) return 0;
+    let timeStr = t.toUpperCase().trim();
+    const match = timeStr.match(/(\d{1,2}):(\d{1,2})/);
+    if (!match) return 0;
+    let hours = parseInt(match[1]);
+    let minutes = parseInt(match[2]);
+    if (timeStr.includes('CH') || timeStr.includes('PM')) { if (hours < 12) hours += 12; }
+    if (timeStr.includes('SA') || timeStr.includes('AM')) { if (hours === 12) hours = 0; }
+    return hours * 60 + minutes;
+};
+
+const parseVNToDate = (vnStr) => {
+    const p = vnStr.split('/');
+    return new Date(p[2], p[1] - 1, p[0]);
+};
+
+// --- 3. ĐỒNG HỒ ---
+setInterval(() => {
+    const clockEl = document.getElementById('realTimeClock');
+    if (clockEl) {
+        const now = new Date();
+        clockEl.innerText = now.toLocaleTimeString('vi-VN');
+    }
+}, 1000);
+
+// --- 4. LOGIN ---
+window.handleLogin = async () => {
+    const cidInput = document.getElementById('companyID').value.trim().toLowerCase();
+    const idInput = document.getElementById('inputID').value.trim();
+    const passInput = document.getElementById('inputPass').value.trim();
+
+    if (!cidInput || !idInput || !passInput) return alert("Vui lòng nhập đủ thông tin!");
+
+    try {
+        const userRef = ref(db, `COMPANIES/${cidInput}/users/${idInput}`);
+        const snap = await get(userRef);
+
+        if (snap.exists()) {
+            const userData = snap.val();
+            if (userData.password !== passInput) return alert("Sai mật khẩu!");
+
+            // 1. Quản lý Device Token
+            let localToken = localStorage.getItem('HT_DEVICE_TOKEN');
+            if (!localToken) {
+                localToken = 'PWA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                localStorage.setItem('HT_DEVICE_TOKEN', localToken);
+            }
+
+            const cloudToken = (userData.deviceId || userData.deviceID || "").toString().trim();
+
+            // 2. Kiểm tra trạng thái khóa/mở khóa thiết bị
+            const isNewOrUnlocked = !cloudToken || 
+                                    cloudToken === "" || 
+                                    cloudToken.includes("giải phóng") || 
+                                    cloudToken.includes("mở khóa");
+
+            if (isNewOrUnlocked) {
+                await update(userRef, { 
+                    deviceId: localToken,
+                    deviceID: localToken 
+                });
+            } else if (cloudToken !== localToken) {
+                return alert("Thiết bị không hợp lệ. Vui lòng liên hệ Admin!");
+            }
+
+            // --- BỔ SUNG: LƯU PHIÊN ĐĂNG NHẬP ---
+            // Tạo đối tượng session bao gồm thông tin user và mã công ty (cid)
+            const userSession = { ...userData, cid: cidInput, userId: idInput };
+            
+            // Lưu vào localStorage dưới dạng chuỗi JSON
+            localStorage.setItem('HT_USER_SESSION', JSON.stringify(userSession));
+
+            // Thiết lập biến toàn cục và khởi chạy giao diện
+            currentUser = userSession;
+            initDashboard();
+            
+        } else {
+            alert("Tài khoản không tồn tại!");
+        }
+    } catch (e) { 
+        console.error(e);
+        alert("Lỗi kết nối Firebase!"); 
+    }
+};
+// --- 5. CHẤM CÔNG (GIỮ NGUYÊN) ---
+window.handleAttendance = async () => {
+    if (!currentUser) return alert("Vui lòng đăng nhập lại!");
+    if (!navigator.geolocation) return alert("Trình duyệt không hỗ trợ định vị!");
+    
+    navigator.geolocation.getCurrentPosition(async (position) => {
+        const userLat = position.coords.latitude;
+        const userLon = position.coords.longitude;
+        const now = new Date();
+        const todayISO = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        const todayDisplay = String(now.getDate()).padStart(2, '0') + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+
+        try {
+            const schedSnap = await get(ref(db, `COMPANIES/${currentUser.cid}/schedules/${todayISO}/${currentUser.id}`));
+            if (!schedSnap.exists()) return alert("Bạn không có lịch làm việc hôm nay!");
+
+            const [shiftsSnap, locationsSnap] = await Promise.all([
+                get(ref(db, `COMPANIES/${currentUser.cid}/shifts`)),
+                get(ref(db, `COMPANIES/${currentUser.cid}/locations`))
+            ]);
+            
+            const allShifts = shiftsSnap.val() || {};
+            const allLocations = locationsSnap.val() || {};
+            const assignedCodes = schedSnap.val().shiftCodes || [];
+            const assignedShifts = assignedCodes.map(code => allShifts[code]).filter(s => s);
+
+            const matchedShifts = assignedShifts.filter(shift => {
+                const inStart = timeToMins(shift.detectRange.inStart);
+                const outEnd = timeToMins(shift.detectRange.outEnd);
+                return currentMins >= inStart && currentMins <= outEnd;
+            });
+
+            if (matchedShifts.length === 0) return alert("Không trong khung giờ quẹt thẻ!");
+            const selectedShift = matchedShifts[0];
+
+            const shiftLogs = attendHistory.filter(l => l.date === todayDisplay && l.shiftCode === selectedShift.code);
+            if (shiftLogs.length >= 2) return alert(`Bạn đã hoàn thành đủ 2 lượt cho ca ${selectedShift.name}!`);
+
+            let isAtLocation = false;
+            const allowedLocIds = Array.isArray(selectedShift.locationId) ? selectedShift.locationId : [selectedShift.locationId];
+            allowedLocIds.forEach(locId => {
+                const loc = allLocations[locId];
+                if (loc && calculateDistance(userLat, userLon, loc.lat, loc.lon) <= 200) isAtLocation = true;
+            });
+
+            if (!isAtLocation) return alert("Bạn đang đứng ngoài phạm vi cho phép!");
+
+            const isCheckIn = (shiftLogs.length === 0);
+            if (confirm(`XÁC NHẬN CHẤM CÔNG\nCa: ${selectedShift.name}\nLượt: ${isCheckIn ? "VÀO CA" : "RA CA"}`)) {
+                const currT = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
+                let status = "Đúng giờ";
+                if (isCheckIn && currentMins > timeToMins(selectedShift.timeIn) + (selectedShift.lateGrace || 0)) status = "Đi trễ";
+                else if (!isCheckIn && currentMins < timeToMins(selectedShift.timeOut) - (selectedShift.earlyGrace || 0)) status = "Về sớm";
+
+                await push(ref(db, `COMPANIES/${currentUser.cid}/attendancelogs`), {
+                    userId: currentUser.id, userName: currentUser.name, time: currT, date: todayDisplay,
+                    type: isCheckIn ? `BẮT ĐẦU CA ${selectedShift.code}` : `KẾT THÚC CA ${selectedShift.code}`,
+                    status: status, shiftCode: selectedShift.code,
+                    location: { lat: userLat, lng: userLon },
+                    timestamp: now.toISOString()
+                });
+                alert("Chấm công thành công!");
+            }
+        } catch (e) { alert("Lỗi: " + e.message); }
+    }, (error) => alert("Vui lòng bật định vị GPS!"), { enableHighAccuracy: true });
+};
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// --- 6. NGHỈ PHÉP (GIỮ NGUYÊN) ---
+const calculateLeaveDays = () => {
+    const from = document.getElementById('leaveFrom').value, to = document.getElementById('leaveTo').value;
+    const sSession = document.getElementById('startSession').value, eSession = document.getElementById('endSession').value;
+    if (!from || !to) return 0;
+    let diff = Math.floor((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1;
+    if (diff > 0) {
+        if (sSession === 'Chiều') diff -= 0.5;
+        if (eSession === 'Sáng') diff -= 0.5;
+        const final = diff > 0 ? diff : 0.5;
+        if (document.getElementById('tempTotalDays')) document.getElementById('tempTotalDays').innerText = final.toFixed(1) + " ngày";
+        return final;
+    }
+    return 0;
+};
+
+document.addEventListener('change', (e) => { if (['leaveFrom', 'leaveTo', 'startSession', 'endSession'].includes(e.target.id)) calculateLeaveDays(); });
+
+window.toggleLeaveForm = (show) => {
+    const form = document.getElementById('leaveFormPopup');
+    if (form) form.classList.toggle('hidden', !show);
+};
+
+window.addEventListener('load', () => {
+    const savedSession = localStorage.getItem('HT_USER_SESSION');
+    if (savedSession) {
+        try {
+            currentUser = JSON.parse(savedSession);
+            // Gọi hàm khởi tạo giao diện ngay lập tức
+            initDashboard();
+        } catch (e) {
+            localStorage.removeItem('HT_USER_SESSION');
+        }
+    }
+});
+
+window.submitLeaveRequest = async () => {
+    const totalDays = calculateLeaveDays(), reason = document.getElementById('leaveReason').value.trim();
+    if (totalDays <= 0 || !reason) return alert("Nhập đủ thông tin!");
+    try {
+        await push(ref(db, `COMPANIES/${currentUser.cid}/leaveRequests`), {
+            userId: currentUser.id, userName: currentUser.name, reason, fromDate: document.getElementById('leaveFrom').value,
+            toDate: document.getElementById('leaveTo').value, startSession: document.getElementById('startSession').value,
+            endSession: document.getElementById('endSession').value, totalDays, status: 'Pending', timestamp: Date.now()
+        });
+        alert("Thành công!"); window.toggleLeaveForm(false);
+    } catch (e) { alert("Lỗi gửi đơn!"); }
+};
+
+window.deleteLeaveRequest = async (key) => {
+    if (confirm("Xóa đơn này?")) {
+        await remove(ref(db, `COMPANIES/${currentUser.cid}/leaveRequests/${key}`));
+    }
+};
+
+// --- 7. TRA CỨU LỊCH SỬ (GIỮ NGUYÊN) ---
+window.filterHistory = () => {
+    const from = document.getElementById('histFrom').value;
+    const to = document.getElementById('histTo').value;
+    const list = document.getElementById('historyList');
+    if (!list || !from || !to) return;
+    const dFrom = new Date(from); dFrom.setHours(0,0,0,0);
+    const dTo = new Date(to); dTo.setHours(23,59,59,999);
+    const filtered = attendHistory.filter(l => {
+        const d = parseVNToDate(l.date);
+        return d >= dFrom && d <= dTo;
+    }).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    renderHistoryUI(filtered);
+};
+
+function renderHistoryUI(logs) {
+    const historyList = document.getElementById('historyList');
+    if (!historyList) return;
+    if (logs.length === 0) {
+        historyList.innerHTML = `<div class="py-20 text-center opacity-20 italic">Không tìm thấy dữ liệu</div>`;
+    } else {
+        historyList.innerHTML = logs.map(l => {
+            const isCheckIn = l.type.includes('BẮT ĐẦU');
+            return `<div class="bg-white p-4 rounded-3xl border border-slate-50 shadow-sm mb-3 flex justify-between items-center"><div class="flex items-center gap-4"><div class="w-12 h-12 rounded-2xl ${isCheckIn ? 'bg-blue-50 text-blue-500' : 'bg-rose-50 text-rose-500'} flex items-center justify-center"><i class="fas ${isCheckIn ? 'fa-sign-in-alt' : 'fa-sign-out-alt'} text-lg"></i></div><div><h4 class="text-xs font-black text-slate-800 uppercase">${isCheckIn ? 'Vào' : 'Ra'} - ${l.shiftCode}</h4><p class="text-[10px] font-bold text-slate-400">${l.date}</p></div></div><div class="text-right"><p class="text-sm font-black text-slate-700">${l.time}</p><span class="text-[8px] font-black uppercase px-2 py-0.5 rounded ${l.status === 'Đúng giờ' ? 'text-emerald-500 bg-emerald-50' : 'text-orange-500 bg-orange-50'}">${l.status}</span></div></div>`;
+        }).join('');
+    }
+}
+
+// --- 8. BẢNG CÔNG (CALENDAR) - CẬP NHẬT KIỂM TRA ĐIỀU KIỆN GIỜ RA ---
+window.changeCalendarMonth = (offset) => {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + offset);
+    renderCalendar();
+};
+
+async function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const title = document.getElementById('calendarTitle');
+    const totalEl = document.getElementById('totalWorkDaysDisplay');
+    if (!grid || !title || !currentUser) return;
+
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    title.innerText = `Tháng ${String(month + 1).padStart(2, '0')}/${year}`;
+
+    // Tải cấu hình Ca làm việc để lấy workCount và các tham số giờ giấc
+    const shiftsSnap = await get(ref(db, `COMPANIES/${currentUser.cid}/shifts`));
+    const allShifts = shiftsSnap.exists() ? shiftsSnap.val() : {};
+
+    // Lọc các bản ghi của tháng này
+    const monthLogs = attendHistory.filter(l => {
+        const d = parseVNToDate(l.date);
+        return d.getMonth() === month && d.getFullYear() === year;
+    });
+
+    const calculateValidWorkOnDay = (dateStr) => {
+        const dayLogs = monthLogs.filter(l => l.date === dateStr);
+        let dayWork = 0;
+
+        const logsByShift = dayLogs.reduce((acc, log) => {
+            if (!acc[log.shiftCode]) acc[log.shiftCode] = [];
+            acc[log.shiftCode].push(log);
+            return acc;
+        }, {});
+
+        Object.keys(logsByShift).forEach(shiftCode => {
+            const shiftCfg = allShifts[shiftCode];
+            const logs = logsByShift[shiftCode];
+            
+            // 1. Kiểm tra lượt BẮT ĐẦU
+            const hasStart = logs.some(l => l.type.includes("BẮT ĐẦU"));
+            
+            // 2. Kiểm tra lượt KẾT THÚC và Giờ ra thực tế
+            const endLog = logs.find(l => l.type.includes("KẾT THÚC"));
+
+            if (hasStart && endLog && shiftCfg) {
+                const actualOutMins = timeToMins(endLog.time); // Giờ nhân viên quẹt thực tế
+                const requiredOutMins = timeToMins(shiftCfg.timeOut); // Giờ ra quy định (11:30)
+                const graceMins = parseInt(shiftCfg.earlyGrace || 0); // Phút cho phép về sớm (5p)
+
+                // ĐIỀU KIỆN TÍNH CÔNG CHẶT CHẼ:
+                // Giờ quẹt ra thực tế phải >= (Giờ ra quy định - Phút cho phép về sớm)
+                if (actualOutMins >= (requiredOutMins - graceMins)) {
+                    dayWork += parseFloat(shiftCfg.workCount || 0);
+                } else {
+                    // Nếu quẹt ra lúc 10:30 (630p) mà quy định 11:30 (690p) - 5p = 685p
+                    // 630 < 685 nên sẽ không được cộng công
+                    console.log(`Ngày ${dateStr}: Ca ${shiftCode} quẹt ra sớm (${endLog.time}), không đủ điều kiện tính công.`);
+                }
+            } else if (hasStart && endLog && !shiftCfg) {
+                // Dự phòng nếu không tìm thấy cấu hình ca, mặc định tính 1 công
+                dayWork += 1;
+            }
+        });
+        return dayWork;
+    };
+
+    let totalWorkCount = 0;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+    let html = "";
+    const weeks = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+    weeks.forEach(w => html += `<div class="text-center text-[10px] font-black text-slate-300 uppercase py-2">${w}</div>`);
+
+    for (let i = 0; i < (firstDay === 0 ? 0 : firstDay); i++) html += `<div></div>`;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+        const dayWork = calculateValidWorkOnDay(dateStr);
+        totalWorkCount += dayWork;
+
+        const hasWork = dayWork > 0;
+        html += `
+            <div class="aspect-square flex flex-col items-center justify-center rounded-2xl border transition-all ${hasWork ? 'bg-blue-500 border-blue-400 text-white shadow-md' : 'bg-white border-slate-50 text-slate-300'}">
+                <span class="text-xs font-black">${day}</span>
+                ${hasWork ? `<span class="text-[7px] font-bold opacity-90 leading-none mt-1 uppercase">${dayWork} công</span>` : ''}
+            </div>`;
+    }
+
+    if (totalEl) totalEl.innerText = totalWorkCount % 1 === 0 ? totalWorkCount : totalWorkCount.toFixed(1);
+    grid.innerHTML = html;
+}
+// --- 9. DASHBOARD & TABS ---
+function initDashboard() {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainDashboard').classList.remove('hidden');
+    
+    // Header & Profile cơ bản
+    const userHeaderName = document.getElementById('userNameDisplay');
+    if (userHeaderName) userHeaderName.innerText = currentUser.name;
+    document.getElementById('compNameDisplay').innerText = currentUser.cid.toUpperCase();
+
+    // 1. HỒ SƠ (GIỮ NGUYÊN)
+    onValue(ref(db, `COMPANIES/${currentUser.cid}/users/${currentUser.id}`), (uSnap) => {
+        if (uSnap.exists()) {
+            const uData = uSnap.val();
+            currentUser.leaveQuota = parseFloat(uData.leaveQuota || 0);
+            if (document.getElementById('profName')) document.getElementById('profName').innerText = uData.name;
+            if (document.getElementById('profID')) document.getElementById('profID').innerText = `#${uData.id}`;
+            if (document.getElementById('profRole')) document.getElementById('profRole').innerText = uData.role || "Nhân viên";
+            if (document.getElementById('profPhone')) document.getElementById('profPhone').innerText = uData.phone || "---";
+            if (document.getElementById('profEmail')) document.getElementById('profEmail').innerText = uData.email || "---";
+            if (document.getElementById('profJoinDate')) document.getElementById('profJoinDate').innerText = uData.joinDate || "--/--/----";
+            if (document.getElementById('profDept')) document.getElementById('profDept').innerText = uData.department || "Văn phòng";
+            const quotaDisplay = document.getElementById('leaveQuotaDisplay');
+            if (quotaDisplay) quotaDisplay.innerText = Math.floor(currentUser.leaveQuota);
+        }
+    });
+
+    // 2. CHẤM CÔNG & LỊCH SỬ & BẢNG CÔNG
+    const logRef = query(ref(db, `COMPANIES/${currentUser.cid}/attendancelogs`), orderByChild('userId'), equalTo(currentUser.id));
+    onValue(logRef, (snap) => {
+        attendHistory = snap.exists() ? Object.values(snap.val()).filter(log => log.userId === currentUser.id) : [];
+        const now = new Date();
+        const todayStr = String(now.getDate()).padStart(2, '0') + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
+        
+        // Tab Chấm công hôm nay
+        const todayLogs = attendHistory.filter(l => l.date === todayStr).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const punchBtn = document.querySelector('.punch-btn'), turnText = document.getElementById('currentTurnText');
+        if (punchBtn && turnText) {
+            const isNextOut = (todayLogs.length % 2 !== 0);
+            punchBtn.style.backgroundColor = isNextOut ? "#e11d48" : "#3b82f6";
+            punchBtn.innerHTML = `<i class="fas fa-fingerprint text-5xl mb-2"></i><span class="text-lg font-black uppercase">${isNextOut ? 'Check-out' : 'Check-in'}</span>`;
+            turnText.innerText = isNextOut ? `Ra lượt ${Math.ceil(todayLogs.length / 2)}` : `Vào lượt ${Math.floor(todayLogs.length / 2) + 1}`;
+        }
+        const todayLogsList = document.getElementById('todayLogsList');
+        if (todayLogsList) {
+            todayLogsList.innerHTML = todayLogs.length === 0 ? `<div class="py-12 text-center opacity-30 italic">Chưa có dữ liệu hôm nay</div>` : 
+                `<div class="timeline-container">` + todayLogs.map(l => {
+                    const isCheckIn = l.type.includes('BẮT ĐẦU'), theme = isCheckIn ? 'text-blue-500' : 'text-rose-500';
+                    return `<div class="timeline-item animate-fadeIn"><div class="timeline-time">${l.time}</div><div class="timeline-dot ${theme}"></div><div class="timeline-card"><div class="flex justify-between items-center"><div class="flex items-center gap-3"><div class="w-10 h-10 ${isCheckIn ? 'bg-blue-50' : 'bg-rose-50'} ${theme} rounded-full flex items-center justify-center"><i class="fas ${isCheckIn ? 'fa-sign-in-alt' : 'fa-sign-out-alt'} text-sm"></i></div><div><h4 class="text-[11px] font-black uppercase">${isCheckIn ? 'Vào ca' : 'Ra ca'}</h4><p class="text-[9px] font-bold text-slate-400 uppercase">Mã ca: ${l.shiftCode}</p></div></div><span class="text-[8px] font-black px-2 py-1 rounded-lg uppercase ${l.status === 'Đúng giờ' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'}">${l.status}</span></div></div></div>`;
+                }).join('') + `</div>`;
+        }
+        renderHistoryUI(attendHistory.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+        renderCalendar(); // Luôn vẽ lại lịch khi có data mới
+    });
+
+    // 3. NGHỈ PHÉP (GIỮ NGUYÊN)
+    onValue(query(ref(db, `COMPANIES/${currentUser.cid}/leaveRequests`), orderByChild('userId'), equalTo(currentUser.id)), (snap) => {
+        const list = document.getElementById('leaveHistoryList');
+        if (list) list.innerHTML = !snap.exists() ? `<div class="py-12 text-center opacity-30 italic">Chưa có đơn nghỉ phép</div>` : 
+            Object.entries(snap.val()).reverse().map(([key, l]) => {
+                let sClass = "bg-orange-100 text-orange-600", sText = "Đang chờ";
+                if (l.status === 'Approved') { sClass = "bg-emerald-100 text-emerald-600"; sText = "Đã duyệt"; }
+                else if (l.status === 'Rejected') { sClass = "bg-rose-100 text-rose-600"; sText = "Từ chối"; }
+                return `<div class="bg-white p-5 pr-16 rounded-[32px] border border-slate-50 mb-4 relative shadow-sm animate-fadeIn"><div class="flex justify-between items-start mb-4"><div class="flex-1 pr-6"><span class="text-[9px] font-black px-2 py-1 rounded-lg uppercase ${sClass} mb-2 inline-block">${sText}</span><p class="text-sm font-black text-slate-800 uppercase tracking-tighter leading-tight">${l.reason}</p></div><div class="text-right"><p class="text-xl font-black text-blue-600 leading-none">${l.totalDays}</p><p class="text-[8px] font-bold text-slate-400 uppercase">Ngày nghỉ</p></div></div><div class="text-[10px] font-bold text-slate-400 border-t pt-4"><span>${l.fromDate} (${l.startSession}) → ${l.toDate} (${l.endSession})</span></div>${l.status === 'Pending' ? `<button onclick=\"window.deleteLeaveRequest('${key}')\" class=\"absolute top-5 right-5 w-9 h-9 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center\"><i class=\"fas fa-trash-alt text-xs\"></i></button>` : ''}</div>`;
+            }).join('');
+    });
+}
+
+// Tab Switching
+window.changeTab = (id, el) => {
+    // Ẩn tất cả các tab
+    document.querySelectorAll('.tab-content').forEach(t => {
+        t.classList.remove('active');
+    });
+
+    // Hiện tab được chọn
+    const target = document.getElementById(`tab-${id}`);
+    if (target) {
+        target.classList.add('active');
+        target.scrollTop = 0; // Luôn cuộn lên đầu khi chuyển tab
+    }
+
+    // Cập nhật giao diện nút bấm (giữ nguyên logic cũ của bạn)
+    document.querySelectorAll('nav button, nav .nav-main-icon').forEach(b => b.classList.remove('active', 'text-blue-500'));
+    if (el.classList.contains('nav-main-icon')) {
+        el.classList.add('active');
+    } else {
+        el.classList.add('text-blue-500');
+    }
+};
+window.handleLogout = () => {
+    if (confirm("Bạn có chắc chắn muốn đăng xuất?")) {
+        // Xóa thông tin user nhưng GIỮ LẠI HT_DEVICE_TOKEN để không làm sai lệch khóa thiết bị
+        localStorage.removeItem('HT_USER_SESSION');
+        location.reload(); // Quay lại màn hình đăng nhập
+    }
+};

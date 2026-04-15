@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>HT Attendance PWA</title>
+    
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="HT Attendance">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/128/2107/2107573.png">
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --primary: #3b82f6; --bg: #f8fafc; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); user-select: none; -webkit-tap-highlight-color: transparent; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .nav-main-icon { width: 65px; height: 65px; background: #1e293b; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-top: -35px; box-shadow: 0 10px 15px rgba(59, 130, 246, 0.3); border: 4px solid var(--bg); transition: all 0.3s; }
+        .nav-main-icon.active { background: var(--primary); }
+        .punch-btn:active { transform: scale(0.92); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        .timeline-item { position: relative; padding-left: 45px; }
+
+/* Tối ưu khung Timeline để không bị chồng giờ */
+/* Container chính */
+.timeline-container {
+    position: relative;
+    margin-top: 25px;
+    padding-bottom: 20px;
+}
+
+/* Từng hàng log - Sử dụng Flexbox để căn giữa */
+.timeline-item {
+    position: relative;
+    margin-left: 75px; /* Tạo khoảng trống rộng rãi cho cột giờ bên trái */
+    padding-left: 30px; 
+    margin-bottom: 20px; /* Dùng margin thay cho padding-bottom để căn giữa chuẩn */
+    display: flex;
+    align-items: center; /* CĂN GIỮA TẤT CẢ THÀNH PHẦN THEO CHIỀU DỌC */
+    min-height: 70px;
+}
+
+/* Vẽ đường kẻ dashed nối giữa các item */
+.timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -1px; /* Căn giữa dấu chấm */
+    top: 50%; /* Bắt đầu từ tâm item này */
+    bottom: -50%; /* Kéo dài đến tâm item tiếp theo */
+    border-left: 2px dashed #e2e8f0;
+    z-index: 1;
+}
+
+/* Item cuối cùng không có đường nối xuống */
+.timeline-item:last-child::before {
+    display: none;
+}
+
+/* Cột Giờ - Căn giữa tuyệt đối theo tâm hàng */
+.timeline-time {
+    position: absolute;
+    left: -85px; 
+    width: 70px;
+    text-align: right;
+    font-size: 11px;
+    font-weight: 800;
+    color: #1e293b;
+    top: 50%;
+    transform: translateY(-50%); /* Dịch chuyển ngược lên 50% để vào tâm */
+}
+
+/* Dấu chấm (Dot) - Căn giữa tuyệt đối */
+.timeline-dot {
+    position: absolute;
+    left: -10px; 
+    top: 50%;
+    transform: translateY(-50%); /* Căn giữa hoàn hảo trên đường dashed */
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 2px currentColor;
+    z-index: 10;
+}
+
+/* Thẻ thông tin Card */
+.timeline-card {
+    flex: 1; /* Tự động giãn hết chiều rộng */
+    background: white;
+    padding: 14px 18px;
+    border-radius: 24px;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+}
+
+/* 1. Khóa cuộn toàn trang */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* Quan trọng: Loại bỏ thanh cuộn chính của trình duyệt */
+    position: fixed; /* Ngăn chặn hiệu ứng bounce trên iOS */
+}
+
+/* 2. Cấu hình Container chính */
+#mainDashboard {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 3. Cho phép cuộn nội dung bên trong từng Tab */
+.tab-content {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto; /* Chỉ hiện thanh cuộn ở đây khi nội dung quá dài */
+    -webkit-overflow-scrolling: touch; /* Giúp cuộn mượt hơn trên iPhone */
+    padding-bottom: 100px; /* Tạo khoảng trống để không bị đè bởi Thanh điều hướng */
+}
+
+/* 4. Ẩn thanh cuộn vật lý để nhìn sạch sẽ hơn (tùy chọn) */
+.tab-content::-webkit-scrollbar {
+    display: none;
+}
+
+body {
+    background-color: #ffffff; /* Đảm bảo nền body là trắng */
+    /* Tránh nội dung bị dính vào tai thỏ iPhone */
+    padding-top: env(safe-area-inset-top); 
+}
+
+#tab-attendance, .tab-content {
+    background-color: #ffffff;
+}
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="min-h-screen bg-white flex flex-col items-center justify-center px-8">
+        <div class="w-24 h-24 bg-white rounded-3xl shadow-2xl flex items-center justify-center mb-6">
+            <i class="fas fa-fingerprint text-5xl text-blue-500"></i>
+        </div>
+        <h1 class="text-2xl font-black text-slate-800 uppercase italic">HT Attendance</h1>
+        <p class="text-[10px] font-bold text-slate-400 tracking-[3px] mb-12 uppercase">Workspace Intelligence</p>
+        
+        <div class="w-full space-y-4">
+            <input type="text" id="companyID" placeholder="Mã doanh nghiệp" class="w-full bg-slate-50 rounded-2xl px-5 py-4 border border-slate-100 outline-none font-bold focus:border-blue-500">
+            <input type="text" id="inputID" placeholder="Mã nhân viên" class="w-full bg-slate-50 rounded-2xl px-5 py-4 border border-slate-100 outline-none font-bold focus:border-blue-500">
+            <input type="password" id="inputPass" placeholder="Mật khẩu" class="w-full bg-slate-50 rounded-2xl px-5 py-4 border border-slate-100 outline-none font-bold focus:border-blue-500">
+            <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-500 py-4 rounded-2xl text-white font-black shadow-lg uppercase active:scale-95 transition-transform">Đăng nhập</button>
+        </div>
+    </div>
+
+    <div id="mainDashboard" class="hidden min-h-screen pb-32">
+        
+       <div id="tab-attendance" class="tab-content active">
+    <div class="bg-white p-4 flex justify-between items-center px-6 sticky top-0 z-10">
+        <div class="text-left">
+    <p class="text-[10px] font-black text-blue-500 uppercase tracking-widest" id="compNameDisplay">HT ATTENDANCE</p>
+    <p class="text-[9px] text-slate-400 font-bold uppercase" id="userNameDisplay">Đang tải...</p>
+</div>
+        <div class="flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-full">
+            <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span class="text-[9px] font-bold text-emerald-600 uppercase">Sẵn sàng</span>
+        </div>
+    </div>
+
+    <div class="flex flex-col items-center px-6">
+        <div class="relative mt-8">
+            <div class="absolute inset-0 bg-blue-500/10 rounded-full scale-125 animate-ping"></div>
+            <div class="absolute inset-0 bg-blue-500/5 rounded-full scale-150"></div>
+            
+            <button onclick="handleAttendance()" class="punch-btn relative w-48 h-48 rounded-full bg-blue-500 flex flex-col items-center justify-center text-white shadow-[0_20px_50px_rgba(59,130,246,0.3)] border-[6px] border-white z-10">
+                <i class="fas fa-fingerprint text-5xl mb-2"></i>
+                <span class="text-lg font-black uppercase tracking-tight">Check-in</span>
+            </button>
+        </div>
+
+        <div class="mt-8 bg-slate-50 px-4 py-2 rounded-2xl flex items-center gap-2 border border-slate-100">
+            <i class="fas fa-flag text-blue-500 text-[10px]"></i>
+            <span class="text-[10px] font-black text-slate-600 uppercase">Lượt: <span id="currentTurnText" class="text-blue-600">Vào lượt 1</span></span>
+        </div>
+
+        <div class="w-full mt-10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-base font-black text-slate-800">Lịch trình hôm nay</h3>
+                <span class="bg-blue-500 text-white text-[9px] font-black px-2 py-1 rounded-lg" id="totalLogsBadge">0 lượt</span>
+            </div>
+            
+            <div class="relative space-y-4 before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-100" id="todayLogsList">
+                </div>
+        </div>
+    </div>
+</div>
+
+       <div id="tab-leave" class="tab-content p-6">
+    <div id="leaveFormPopup" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end">
+        <div class="bg-white w-full rounded-t-[40px] p-8 animate-slide-up">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black text-slate-800 uppercase italic">Đăng ký nghỉ</h3>
+                <button onclick="toggleLeaveForm(false)" class="text-slate-300 text-2xl"><i class="fas fa-times-circle"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Từ ngày</label>
+                        <input type="date" id="leaveFrom" class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none border border-slate-100 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Đến ngày</label>
+                        <input type="date" id="leaveTo" class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none border border-slate-100 mt-1">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                    <div>
+                        <label class="text-[9px] font-black text-blue-400 uppercase ml-1">Bắt đầu từ</label>
+                        <select id="startSession" class="w-full bg-transparent font-bold text-xs outline-none mt-1 text-blue-600">
+                            <option value="Sáng">Đầu buổi Sáng</option>
+                            <option value="Chiều">Đầu buổi Chiều</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-black text-blue-400 uppercase ml-1">Nghỉ cho hết</label>
+                        <select id="endSession" class="w-full bg-transparent font-bold text-xs outline-none mt-1 text-blue-600">
+                            <option value="Chiều">Hết buổi Chiều</option>
+                            <option value="Sáng">Hết buổi Sáng</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Lý do nghỉ</label>
+                    <textarea id="leaveReason" placeholder="Ví dụ: Nghỉ ốm, việc gia đình..." class="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm outline-none h-20 border border-slate-100 mt-1"></textarea>
+                </div>
+
+                <div class="text-right px-2">
+                    <span class="text-[10px] font-bold text-slate-400 italic">Tổng cộng: </span>
+                    <span id="tempTotalDays" class="text-sm font-black text-blue-600">1.0 ngày</span>
+                </div>
+
+                <button onclick="submitLeaveRequest()" class="w-full bg-blue-500 py-4 rounded-2xl text-white font-black shadow-lg uppercase active:scale-95 transition-transform">
+                    Gửi đơn phê duyệt
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-blue-600 p-6 rounded-[32px] text-white flex justify-between items-center shadow-xl mb-8">
+        <div>
+            <p class="text-[10px] font-black opacity-70 uppercase tracking-widest">Quỹ phép còn lại</p>
+            <h2 class="text-4xl font-black" id="leaveQuotaDisplay">0</h2>
+        </div>
+        <button onclick="toggleLeaveForm(true)" class="bg-white text-blue-600 px-5 py-2.5 rounded-2xl font-black text-xs uppercase shadow-md active:scale-95 transition-all">Tạo đơn</button>
+    </div>
+
+    <h3 class="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-[3px] ml-2">Đơn đã gửi</h3>
+    
+    <div id="leaveHistoryList" class="space-y-1 pb-32">
+        <p class="text-center text-slate-300 py-10 text-[10px] font-black uppercase italic">Đang tải dữ liệu...</p>
+    </div>
+</div>
+
+        <div id="tab-history" class="tab-content p-6">
+    <h3 class="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest text-center italic">Tra cứu lịch sử</h3>
+    
+    <div class="bg-white p-4 rounded-3xl border border-slate-50 shadow-sm mb-6 space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="text-[8px] font-black text-slate-400 uppercase ml-2">Từ ngày</label>
+                <input type="date" id="histFrom" class="w-full bg-slate-50 p-3 rounded-xl text-[10px] font-bold outline-none border border-slate-100 mt-1">
+            </div>
+            <div>
+                <label class="text-[8px] font-black text-slate-400 uppercase ml-2">Đến ngày</label>
+                <input type="date" id="histTo" class="w-full bg-slate-50 p-3 rounded-xl text-[10px] font-bold outline-none border border-slate-100 mt-1">
+            </div>
+        </div>
+        <button onclick="filterHistory()" class="w-full bg-blue-500 py-3 rounded-xl text-white text-[10px] font-black uppercase shadow-md active:scale-95 transition-all">Tra cứu dữ liệu</button>
+    </div>
+
+    <div id="historyList" class="space-y-1 pb-32">
+        </div>
+</div>
+
+        <div id="tab-calendar" class="tab-content p-6">
+    <div class="flex justify-between items-center mb-6 px-2">
+        <button onclick="changeCalendarMonth(-1)" class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 active:scale-90 transition-all">
+            <i class="fas fa-chevron-left text-xs"></i>
+        </button>
+        
+        <h3 id="calendarTitle" class="text-base font-black text-slate-800 uppercase italic tracking-tighter">Tháng 04/2026</h3>
+        
+        <button onclick="changeCalendarMonth(1)" class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 active:scale-90 transition-all">
+            <i class="fas fa-chevron-right text-xs"></i>
+        </button>
+    </div>
+
+    <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-[32px] shadow-lg mb-8 text-white relative overflow-hidden">
+        <div class="relative z-10">
+            <p class="text-[10px] font-black uppercase tracking-[3px] opacity-60 mb-1">Tổng công ghi nhận</p>
+            <div class="flex items-end gap-2">
+                <h2 class="text-4xl font-black text-blue-400" id="totalWorkDaysDisplay">0</h2>
+                <p class="text-sm font-bold mb-1 opacity-80 uppercase">Công tháng</p>
+            </div>
+        </div>
+        <i class="fas fa-chart-pie absolute -right-4 -bottom-4 text-8xl opacity-10"></i>
+    </div>
+
+    <div id="calendarGrid" class="grid grid-cols-7 gap-2 mb-8"></div>
+
+    <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+        <p class="text-[10px] font-bold text-blue-600 uppercase tracking-tighter text-center italic">
+            ● Dữ liệu công tính dựa trên lượt quẹt "KẾT THÚC" và cấu hình ca làm việc
+        </p>
+    </div>
+</div>
+
+        <div id="tab-profile" class="tab-content ">
+    <div class="bg-white pt-16 pb-8 flex flex-col items-center rounded-b-[40px] shadow-sm border-b border-slate-100">
+        <div class="relative">
+            <div class="w-28 h-28 rounded-full bg-slate-100 border-4 border-white shadow-xl mb-4 overflow-hidden flex items-center justify-center">
+                <img id="profAvatar" src="https://cdn-icons-png.flaticon.com/512/9131/9131529.png" class="w-full h-full object-cover">
+            </div>
+            <div class="absolute bottom-5 right-2 w-5 h-5 bg-green-500 border-2 border-white rounded-full shadow-sm"></div>
+        </div>
+        <h2 class="text-2xl font-black text-slate-800 uppercase tracking-tight" id="profName">Họ và Tên</h2>
+        <span class="bg-blue-50 text-blue-600 text-[10px] font-black px-4 py-1.5 rounded-full mt-2 tracking-widest uppercase" id="profRole">Nhân viên</span>
+    </div>
+
+    <div class="p-6 space-y-4 pb-32">
+        <p class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Thông tin công tác</p>
+        <div class="bg-white rounded-[32px] p-5 shadow-sm border border-slate-50 space-y-5">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center"><i class="fas fa-id-card text-sm"></i></div>
+                <div><p class="text-[9px] font-bold text-slate-400 uppercase">Mã số nhân viên</p><p class="text-sm font-black text-slate-700" id="profID">#0000</p></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-purple-50 text-purple-500 flex items-center justify-center"><i class="fas fa-building text-sm"></i></div>
+                <div><p class="text-[9px] font-bold text-slate-400 uppercase">Phòng ban</p><p class="text-sm font-black text-slate-700" id="profDept">Văn phòng</p></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center"><i class="fas fa-calendar-check text-sm"></i></div>
+                <div><p class="text-[9px] font-bold text-slate-400 uppercase">Ngày vào làm</p><p class="text-sm font-black text-slate-700" id="profJoinDate">--/--/----</p></div>
+            </div>
+        </div>
+
+        <p class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Liên hệ cá nhân</p>
+        <div class="bg-white rounded-[32px] p-5 shadow-sm border border-slate-50 space-y-5">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center"><i class="fas fa-phone-alt text-sm"></i></div>
+                <div><p class="text-[9px] font-bold text-slate-400 uppercase">Số điện thoại</p><p class="text-sm font-black text-slate-700" id="profPhone">09x xxx xxxx</p></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center"><i class="fas fa-envelope text-sm"></i></div>
+                <div><p class="text-[9px] font-bold text-slate-400 uppercase">Email</p><p class="text-sm font-black text-slate-700" id="profEmail">user@company.com</p></div>
+            </div>
+        </div>
+
+        <button onclick="handleLogout()" class="w-full bg-white border border-rose-100 text-rose-500 py-5 rounded-[24px] font-black mt-6 uppercase shadow-sm active:bg-rose-50 transition-all flex items-center justify-center gap-3">
+            <i class="fas fa-power-off"></i> Đăng xuất tài khoản
+        </button>
+        
+        <p class="text-center text-[9px] font-bold text-slate-300 uppercase tracking-[4px] mt-4">HT Attendance v2.0</p>
+    </div>
+</div>
+
+        <nav class="fixed bottom-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-100 safe-bottom">
+            <div class="flex justify-around items-center h-20">
+                <button onclick="changeTab('profile', this)" class="flex flex-col items-center gap-1 text-slate-400">
+                    <i class="fas fa-user-circle text-xl"></i><span class="text-[8px] font-black uppercase">Hồ sơ</span>
+                </button>
+                <button onclick="changeTab('leave', this)" class="flex flex-col items-center gap-1 text-slate-400">
+                    <i class="fas fa-calendar-minus text-xl"></i><span class="text-[8px] font-black uppercase">Nghỉ phép</span>
+                </button>
+                <div onclick="changeTab('attendance', this)" class="nav-main-icon active" id="nav-punch">
+                    <i class="fas fa-fingerprint text-white text-3xl"></i>
+                </div>
+                <button onclick="changeTab('history', this)" class="flex flex-col items-center gap-1 text-slate-400">
+                    <i class="fas fa-history text-xl"></i><span class="text-[8px] font-black uppercase">Lịch sử</span>
+                </button>
+                <button onclick="changeTab('calendar', this)" class="flex flex-col items-center gap-1 text-slate-400">
+                    <i class="fas fa-th-large text-xl"></i><span class="text-[8px] font-black uppercase">Bảng công</span>
+                </button>
+            </div>
+        </nav>
+    </div>
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('HT Attendance PWA: Sẵn sàng!'))
+                .catch(err => console.log('HT Attendance PWA: Lỗi đăng ký', err));
+        });
+    }
+    </script>
+    <script type="module" src="js/mobile.js"></script>
+</body>
+</html>

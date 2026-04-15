@@ -48,6 +48,7 @@ setInterval(() => {
 }, 1000);
 
 // --- 4. LOGIN ---
+// --- 4. LOGIN (Bản cập nhật sửa lỗi mở khóa thiết bị) ---
 window.handleLogin = async () => {
     const cidInput = document.getElementById('companyID').value.trim().toLowerCase();
     const idInput = document.getElementById('inputID').value.trim();
@@ -63,35 +64,36 @@ window.handleLogin = async () => {
             const userData = snap.val();
             if (userData.password !== passInput) return alert("Sai mật khẩu!");
 
-            // 1. Lấy hoặc tạo mã Token thiết bị hiện tại trên điện thoại
+            // Lấy hoặc tạo mã Token thiết bị trên điện thoại
             let localToken = localStorage.getItem('HT_DEVICE_TOKEN');
             if (!localToken) {
                 localToken = 'PWA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
                 localStorage.setItem('HT_DEVICE_TOKEN', localToken);
             }
 
-            // 2. Kiểm tra mã Token trên Cloud (Kiểm tra cả 2 trường deviceId và deviceID)
-            const cloudToken = (userData.deviceId || userData.deviceID || "").toString();
+            // Kiểm tra Token trên Cloud (Hỗ trợ cả deviceId và deviceID)
+            const cloudToken = (userData.deviceId || userData.deviceID || "").toString().trim();
 
-            // 3. Logic Đăng nhập & Khóa thiết bị
-            // Cho phép đăng nhập nếu: 
-            // - Chưa có Token trên cloud 
-            // - Hoặc Token là chuỗi thông báo "mở khóa" của admin
-            // - Hoặc Token là chuỗi rỗng
-            const isUnlocked = !cloudToken || cloudToken === "" || cloudToken.includes("mở khóa");
+            // LOGIC MỞ KHÓA THÔNG MINH:
+            // Nếu Token trống HOẶC chứa các từ khóa giải phóng/mở khóa từ Admin
+            const isNewOrUnlocked = !cloudToken || 
+                                    cloudToken === "" || 
+                                    cloudToken.includes("giải phóng") || 
+                                    cloudToken.includes("mở khóa");
 
-            if (isUnlocked) {
-                // Tiến hành liên kết thiết bị mới: cập nhật cả 2 trường để đồng bộ tuyệt đối
+            if (isNewOrUnlocked) {
+                // Cho phép đăng nhập và tự động liên kết thiết bị mới
+                // Cập nhật cả 2 trường để đảm bảo đồng bộ tuyệt đối với Admin
                 await update(userRef, { 
                     deviceId: localToken,
                     deviceID: localToken 
                 });
             } else if (cloudToken !== localToken) {
-                // Nếu đã có mã khác và không khớp mã máy hiện tại
+                // Nếu đã liên kết với máy khác và không phải trạng thái mở khóa
                 return alert("Thiết bị không hợp lệ. Vui lòng liên hệ Admin!");
             }
 
-            // Đăng nhập thành công
+            // Đăng nhập thành công, chuyển vào Dashboard
             currentUser = { ...userData, cid: cidInput };
             initDashboard();
         } else {
@@ -99,7 +101,7 @@ window.handleLogin = async () => {
         }
     } catch (e) { 
         console.error(e);
-        alert("Lỗi kết nối hệ thống!"); 
+        alert("Lỗi kết nối Firebase!"); 
     }
 };
 

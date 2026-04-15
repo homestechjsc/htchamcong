@@ -1232,3 +1232,167 @@ window.deleteLeaveRequest = async (key) => {
         await remove(ref(db, getCompRef(`leaveRequests/${key}`)));
     }
 };
+
+// A. LƯU CẤU HÌNH LƯƠNG
+window.saveSalarySettings = async () => {
+    const config = {
+        otRate: parseFloat(document.getElementById('cfg_ot_rate').value) || 1.5,
+        insuranceRate: parseFloat(document.getElementById('cfg_insurance_rate').value) || 10.5,
+        taxFree: parseInt(document.getElementById('cfg_tax_free').value) || 11000000,
+        standardHours: parseInt(document.getElementById('cfg_standard_hours').value) || 8
+    };
+    await set(ref(db, getCompRef('salary_configs')), config);
+    alert("Đã cập nhật tham số lương hệ thống!");
+};
+
+// B. LẤY CẤU HÌNH LƯƠNG
+async function getSalaryConfigs() {
+    const snap = await get(ref(db, getCompRef('salary_configs')));
+    return snap.exists() ? snap.val() : { otRate: 1.5, insuranceRate: 10.5, taxFree: 11000000, standardHours: 8 };
+}
+
+// C. TÍNH LƯƠNG CHI TIẾT
+window.calculateDetailedSalary = async () => {
+    const monthVal = document.getElementById('salaryMonth').value;
+    if (!monthVal) return alert("Chọn tháng!");
+    const [year, month] = monthVal.split('-').map(Number);
+    const tableBody = document.getElementById('table-salary-body');
+    const cfg = await getSalaryConfigs();
+
+    tableBody.innerHTML = '<tr><td colspan="6" class="p-10 text-center font-bold text-blue-500 animate-pulse">ĐANG KẾT XUẤT...</td></tr>';
+
+    const [logsSnap, usersSnap, shiftsSnap] = await Promise.all([
+        get(ref(db, getCompRef('attendancelogs'))),
+        get(ref(db, getCompRef('users'))),
+        get(ref(db, getCompRef('shifts')))
+    ]);
+
+    const allLogs = logsSnap.exists() ? Object.values(logsSnap.val()) : [];
+    const users = usersSnap.val() || {};
+    const shifts = shiftsSnap.val() || {};
+    let html = "";
+
+    Object.entries(users).forEach(([id, user]) => {
+        // Tận dụng lại logic tính toán từ "Báo cáo tổng hợp" của bạn
+        // (Tính totalWorkDays, totalOTMins, totalLateMins, totalEarlyMins tại đây)
+        
+        const ratePerDay = Number(user.salary || 0);
+        const ratePerMin = ratePerDay / cfg.standardHours / 60;
+        
+        const moneyBase = totalWorkDays * ratePerDay;
+        const moneyOT = totalOTMins * ratePerMin * cfg.otRate;
+        const moneyFine = (totalLateMins + totalEarlyMins) * ratePerMin;
+        const insurance = moneyBase * (cfg.insuranceRate / 100);
+        
+        const netSalary = moneyBase + moneyOT - moneyFine - insurance;
+
+        html += `
+            <tr class="border-b hover:bg-slate-50 transition-all">
+                <td class="p-4">
+                    <b class="text-xs text-slate-800 uppercase">${user.name}</b><br>
+                    <small class="text-slate-400 font-mono">Lương/Ca: ${ratePerDay.toLocaleString()}đ</small>
+                </td>
+                <td class="p-4 text-center">
+                    <span class="text-blue-600 font-black">${totalWorkDays.toFixed(1)} Công</span><br>
+                    <span class="text-[9px] font-bold text-orange-500">+${moneyOT.toLocaleString()}đ OT</span>
+                </td>
+                <td class="p-4 text-center font-bold text-rose-500">-${moneyFine.toLocaleString()}đ</td>
+                <td class="p-4 text-center"><input type="number" value="0" class="w-20 p-1 border rounded text-center font-bold text-emerald-600 shadow-sm"></td>
+                <td class="p-4 text-center text-rose-600 font-bold text-[10px]">BH: ${insurance.toLocaleString()}đ</td>
+                <td class="p-4 text-right"><b class="text-emerald-600 text-sm font-black">${Math.round(netSalary).toLocaleString()}đ</b></td>
+            </tr>`;
+    });
+    tableBody.innerHTML = html;
+};
+
+// HÀM TỔNG HỢP DASHBOARD THÔNG MINH
+window.updateRealtimeDashboard = async () => {
+    const today = new Date().toLocaleDateString('vi-VN'); // Lấy ngày hôm nay định dạng d/m/yyyy
+    
+    try {
+        const [uSnap, lSnap, sSnap] = await Promise.all([
+            get(ref(db, getCompRef('users'))),
+            get(ref(db, getCompRef('attendancelogs'))),
+            get(ref(db, getCompRef('shifts')))
+        ]);
+
+        const users = uSnap.val() || {};
+        const logs = lSnap.exists() ? Object.values(lSnap.val()) : [];
+        const shifts = sSnap.val() || {};
+        
+        // Lọc log hôm nay
+        const todayLogs = logs.filter(l => l.date === today);
+        
+        let stats = { total: Object.keys(users).length, present: 0, late: 0, early: 0 };
+        let hourlyData = new Array(24).fill(0);
+        let realtimeHTML = "";
+
+        Object.entries(users).forEach(([id, user]) => {
+            const userLogs = todayLogs.filter(l => l.userId === id).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+            const hasIn = userLogs.some(l => l.type.includes("BẮT ĐẦU"));
+            const hasOut = userLogs.some(l => l.type.includes("KẾT THÚC"));
+
+            if (hasIn) {
+                stats.present++;
+                const firstIn = userLogs.find(l => l.type.includes("BẮT ĐẦU"));
+                const s = shifts[firstIn.shiftCode];
+                if (s && timeToMins(firstIn.time) > (timeToMins(s.timeIn) + (s.lateGrace || 0))) stats.late++;
+                
+                // Lưu dữ liệu biểu đồ
+                const h = parseInt(firstIn.time.split(':')[0]);
+                if (h < 24) hourlyData[h]++;
+            }
+
+            if (hasOut) {
+                const lastOut = [...userLogs].reverse().find(l => l.type.includes("KẾT THÚC"));
+                const s = shifts[lastOut.shiftCode];
+                if (s && timeToMins(lastOut.time) < (timeToMins(s.timeOut) - (s.earlyGrace || 0))) stats.early++;
+            }
+
+            // Giao diện Realtime List
+            let statusBadge = hasOut ? 
+                '<span class="px-2 py-1 bg-slate-100 text-slate-400 text-[8px] font-black rounded-lg">ĐÃ VỀ</span>' : 
+                (hasIn ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[8px] font-black rounded-lg animate-pulse">ĐANG LÀM</span>' : 
+                '<span class="px-2 py-1 bg-rose-50 text-rose-400 text-[8px] font-black rounded-lg">CHƯA VÀO</span>');
+
+            realtimeHTML += `
+                <div class="flex items-center justify-between p-3 bg-white border border-slate-50 rounded-2xl shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center font-black text-xs text-slate-400 border border-slate-100">${user.name.charAt(0)}</div>
+                        <div>
+                            <p class="text-[11px] font-black text-slate-700 uppercase">${user.name}</p>
+                            <p class="text-[9px] text-slate-400 font-bold">${hasIn ? 'Vào: ' + userLogs.find(l => l.type.includes("BẮT ĐẦU")).time : 'Chưa có log'}</p>
+                        </div>
+                    </div>
+                    ${statusBadge}
+                </div>`;
+        });
+
+        // Đổ dữ liệu lên UI
+        document.getElementById('db-total-staff').innerText = stats.total;
+        document.getElementById('db-present').innerText = stats.present;
+        document.getElementById('db-absent').innerText = stats.total - stats.present;
+        document.getElementById('db-late').innerText = stats.late;
+        document.getElementById('db-early').innerText = stats.early;
+        document.getElementById('db-ontime-rate').innerText = stats.present > 0 ? Math.round(((stats.present - stats.late)/stats.present)*100) + "%" : "0%";
+        document.getElementById('db-realtime-list').innerHTML = realtimeHTML;
+        document.getElementById('db-last-update').innerText = "Cập nhật: " + new Date().toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'});
+
+        // Vẽ biểu đồ
+        const maxLogs = Math.max(...hourlyData) || 1;
+        document.getElementById('checkin-chart-container').innerHTML = hourlyData.slice(6, 21).map((count, i) => `
+            <div class="flex-1 flex flex-col items-center group relative h-full justify-end">
+                ${count > 0 ? `<span class="absolute -top-6 text-[9px] font-black text-blue-500 opacity-0 group-hover:opacity-100 transition-all">${count}</span>` : ''}
+                <div class="w-full max-w-[12px] bg-slate-100 group-hover:bg-blue-500 rounded-t-full transition-all" style="height: ${(count/maxLogs)*100}%"></div>
+            </div>
+        `).join('');
+
+    } catch (e) { console.error("Dashboard Error:", e); }
+};
+
+// Gọi Dashboard ngay khi mở tab Nhật ký Realtime
+onValue(ref(db, getCompRef('attendancelogs')), () => {
+    if (document.getElementById('dashboard').classList.contains('active-content')) {
+        window.updateRealtimeDashboard();
+    }
+});

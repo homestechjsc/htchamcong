@@ -352,7 +352,15 @@
             </div>
         </nav>
     </div>
-
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('HT Attendance PWA: Sẵn sàng!'))
+                .catch(err => console.log('HT Attendance PWA: Lỗi đăng ký', err));
+        });
+    }
+    </script>
     <script type="module" src="js/mobile.js"></script>
 </body>
 </html>

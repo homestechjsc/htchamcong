@@ -141,6 +141,26 @@ body {
 #tab-attendance, .tab-content {
     background-color: #ffffff;
 }
+
+/* Đảm bảo Popup không bao giờ vượt quá chiều cao màn hình và cho phép cuộn nội dung */
+#leaveFormPopup > div {
+    max-height: 90vh; /* Giới hạn chiều cao tối đa là 90% màn hình */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Thêm vùng cuộn cho phần chứa các ô nhập liệu */
+#leaveFormPopup .space-y-4 {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 20px;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Ẩn thanh cuộn vật lý để nhìn đẹp hơn */
+#leaveFormPopup .space-y-4::-webkit-scrollbar {
+    display: none;
+}
     </style>
 </head>
 <body>
@@ -397,6 +417,12 @@ body {
     <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
+		// 🔥 ĐĂNG KÝ SERVICE WORKER
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+            .then(() => console.log("✅ SW OK"))
+            .catch(err => console.error(err));
+    }
             navigator.serviceWorker.register('sw.js')
                 .then(reg => console.log('HT Attendance PWA: Sẵn sàng!'))
                 .catch(err => console.log('HT Attendance PWA: Lỗi đăng ký', err));

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HT Attendance | Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; letter-spacing: -0.02em; }
+        .tab-content { display: none; animation: fadeIn 0.4s ease-out; }
+        .active-content { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .sidebar-item { border-radius: 12px; margin: 4px 16px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); color: #94a3b8; }
+        .sidebar-item:hover { background: rgba(59, 130, 246, 0.1); color: #3b82f6; transform: translateX(5px); }
+        .sidebar-item.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3); }
+
+        #map { height: 600px; width: 100%; border-radius: 20px; z-index: 1; border: 4px solid white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); }
+        .modal-content { background: white; margin: 2% auto; padding: 0; border-radius: 24px; width: 1100px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid rgba(255,255,255,0.1); }
+
+        .custom-table thead th { background: #f8fafc; text-transform: uppercase; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; color: #64748b; padding: 16px 24px; border-bottom: 2px solid #f1f5f9; }
+        .custom-table tbody td { padding: 16px 24px; font-size: 0.875rem; color: #1e293b; border-bottom: 1px solid #f1f5f9; }
+        .custom-table tbody tr:hover { background-color: #f8fafc; }
+
+        .badge { padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; }
+        .glass-card { background: white; border-radius: 24px; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden; }
+        .rotate-180 { transform: rotate(180deg); }
+
+        /* Style cho Accordion Phòng ban */
+.dept-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+.dept-group.open .dept-content { max-height: 1000px; transition: max-height 0.5s ease-in; }
+.chevron-icon { transition: transform 0.3s; }
+.dept-group.open .chevron-icon { transform: rotate(180deg); }
+.dept-checkbox { transform: scale(1.1); }
+        /* TRANG ĐĂNG NHẬP */
+        #loginOverlay { position: fixed; inset: 0; z-index: 9999; background: #0f172a; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: white; padding: 40px; border-radius: 32px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body class="bg-[#f8fafc] min-h-screen flex">
+
+    <div id="loginOverlay">
+        <div class="login-card">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 text-white mb-4 shadow-lg shadow-blue-200">
+                    <i class="fas fa-fingerprint text-3xl"></i>
+                </div>
+                <h2 class="text-2xl font-black text-slate-900 tracking-tighter">HT ADMIN LOGIN</h2>
+                <p id="displayCID" class="text-blue-500 font-bold text-[10px] mt-1 uppercase tracking-widest"></p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Tên đăng nhập</label>
+                    <input type="text" id="adminUser" placeholder="Mã nhân viên" class="w-full bg-slate-50 border-2 border-slate-50 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all font-bold">
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Mật khẩu</label>
+                    <input type="password" id="adminPass" placeholder="Password" class="w-full bg-slate-50 border-2 border-slate-50 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all font-bold">
+                </div>
+                <button onclick="handleAdminLogin()" class="w-full bg-slate-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl">Đăng nhập hệ thống</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainDashboard" class="hidden w-full flex">
+        <aside class="w-80 bg-slate-950 text-white flex-shrink-0 flex flex-col sticky top-0 h-screen">
+            <div class="p-10 text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 mb-4 shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-fingerprint text-2xl"></i>
+                </div>
+                <h1 class="text-xl font-extrabold tracking-tight uppercase italic">HT Attendance</h1>
+                <p class="text-[10px] text-slate-500 uppercase mt-2 tracking-[0.2em] font-bold">Workspace Intelligence</p>
+            </div>
+
+            <nav class="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
+                <button onclick="showTab('dashboard', this)" class="sidebar-item active w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all">
+                    <i class="fas fa-chart-pie mr-4 opacity-70"></i> Nhật ký Realtime
+                </button>
+                <button onclick="showTab('employees', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
+                    <i class="fas fa-user-friends mr-4 opacity-70"></i> Quản lý nhân viên
+                </button>
+                <button onclick="showTab('shifts', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
+                    <i class="fas fa-layer-group mr-4 opacity-70"></i> Quản lý ca làm
+                </button>
+                <button onclick="showTab('schedule', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
+                    <i class="fas fa-calendar-alt mr-4 opacity-70"></i> Phân ca làm việc
+                </button>
+
+                <button onclick="showTab('leave-approval', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
+                    <i class="fas fa-calendar-check mr-4 opacity-70"></i> Duyệt nghỉ phép
+                    <span id="leaveBadge" class="hidden ml-auto bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black">0</span>
+                </button>
+                <button onclick="showTab('employee-map', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
+                    <i class="fas fa-map-location-dot mr-4 opacity-70"></i> Vị trí nhân viên
+                </button>
+
+                <div class="px-4">
+                    <button onclick="toggleSubMenu('reportSub')" class="sidebar-item w-full flex items-center py-3 px-6 font-semibold !mx-0 text-slate-300">
+                        <i class="fas fa-file-contract mr-4 opacity-70"></i> Báo cáo & Lương
+                        <i class="fas fa-chevron-down ml-auto text-[10px] transition-transform" id="icon-reportSub"></i>
+                    </button>
+                    <div id="reportSub" class="hidden bg-white/5 rounded-xl mt-2 space-y-1 mx-2 border border-white/5 font-bold uppercase text-[10px]">
+                        <button onclick="showTab('report-attendance', this)" class="w-full text-left py-2.5 px-8 text-slate-400 hover:text-white">Báo cáo Vào - Ra</button>
+                        <button onclick="showTab('report-ot', this)" class="w-full text-left py-2.5 px-8 text-slate-400 hover:text-white">Báo cáo Tăng ca</button>
+                        <button onclick="showTab('report-late', this)" class="w-full text-left py-2.5 px-8 text-slate-400 hover:text-white">Báo cáo Trễ/Sớm</button>
+                        <button onclick="showTab('report-summary', this)" class="w-full text-left py-2.5 px-8 text-blue-400 hover:text-white">Báo cáo Tổng hợp</button>
+                    </div>
+                </div>
+
+                <button onclick="showTab('settings', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
+                    <i class="fas fa-cog mr-4 opacity-70"></i> Cấu hình hệ thống
+                </button>
+            </nav>
+        </aside>
+
+        <main class="flex-1 p-12 overflow-y-auto">
+            <div class="flex justify-between items-center mb-12">
+                <div>
+                    <h2 id="pageTitle" class="text-3xl font-extrabold text-slate-900 tracking-tight uppercase">NHẬT KÝ CHẤM CÔNG</h2>
+                    <p id="subTitleCID" class="text-blue-500 mt-2 font-black uppercase text-xs tracking-widest italic"></p>
+                </div>
+                <div class="flex items-center gap-4 bg-white p-2 rounded-2xl border shadow-sm">
+                    <div class="pr-4 pl-2 border-r border-slate-100 text-right">
+                        <p id="adminNameDisplay" class="text-xs font-bold text-slate-900 italic">Quản trị viên</p>
+                        <p class="text-[10px] text-green-500 font-bold uppercase tracking-widest">Online</p>
+                    </div>
+                    <button onclick="location.reload()" class="w-10 h-10 rounded-xl bg-rose-600 text-white shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">
+                        <i class="fas fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="dashboard" class="tab-content active-content">
+                <div class="glass-card"><table class="custom-table w-full text-left"><thead><tr><th>Nhân viên</th><th>Thời gian</th><th>Ca làm việc</th><th>Trạng thái</th><th class="text-right">Khoảng cách</th></tr></thead><tbody id="attendanceTable"></tbody></table></div>
+            </div>
+
+            <div id="employees" class="tab-content">
+                <div class="flex justify-between items-center mb-6"><h3 class="text-lg font-bold text-slate-800 uppercase italic">Cơ sở dữ liệu nhân sự</h3><button onclick="toggleModal('employeeModal', true)" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 uppercase text-xs">+ Thêm nhân viên</button></div>
+                <div id="userList" class="glass-card p-6"></div>
+            </div>
+
+            <div id="shifts" class="tab-content">
+                <div class="flex items-center justify-between mb-8"><div><h2 class="text-xl font-black text-slate-900 uppercase italic tracking-tighter">DANH MỤC CA LÀM VIỆC</h2></div><button onclick="toggleModal('shiftModal', true)" class="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold text-xs hover:bg-black uppercase shadow-xl">+ TẠO CA MỚI</button></div>
+                <div class="glass-card"><table class="custom-table w-full text-left"><thead><tr><th>Mã ca</th><th>Tên ca làm việc</th><th>Giờ quy định</th><th class="text-center">Số lượt</th><th class="text-center">Hệ số công</th><th class="text-center">Địa điểm</th><th class="text-right">Thao tác</th></tr></thead><tbody id="shiftTableBody"></tbody></table></div>
+            </div>
+
+            <div id="schedule" class="tab-content">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 items-stretch">
+        
+        <div class="glass-card flex flex-col h-[500px]">
+            <div class="p-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+                <h4 class="text-[11px] font-black text-blue-600 uppercase italic">1. Chọn nhân viên</h4>
+                <div class="flex gap-2">
+                    <button onclick="selectAllUsers(true)" class="text-[9px] bg-blue-100 text-blue-700 px-2 py-1 rounded-lg font-bold hover:bg-blue-600 hover:text-white transition">Tất cả</button>
+                    <button onclick="selectAllUsers(false)" class="text-[9px] bg-slate-100 text-slate-500 px-2 py-1 rounded-lg font-bold hover:bg-slate-200 transition">Bỏ chọn</button>
+                </div>
+            </div>
+            <div class="p-3">
+                <div class="relative mb-3">
+                    <i class="fas fa-search absolute left-3 top-2.5 text-slate-300 text-[10px]"></i>
+                    <input type="text" id="searchUserAssign" onkeyup="filterUserList()" placeholder="Tìm tên hoặc phòng ban..." 
+                        class="w-full bg-slate-100 border-none pl-8 pr-4 py-2 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20 font-medium">
+                </div>
+            </div>
+            <div id="listUserAssign" class="flex-1 overflow-y-auto px-4 pb-4 custom-scrollbar space-y-3">
+                </div>
+        </div>
+
+        <div class="glass-card flex flex-col h-[500px]">
+            <div class="p-4 border-b border-slate-50 bg-slate-50/50">
+                <h4 class="text-[11px] font-black text-emerald-600 uppercase italic">2. Chọn ca áp dụng</h4>
+            </div>
+            <div id="listShiftAssign" class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+                </div>
+        </div>
+
+        <div class="glass-card flex flex-col h-[500px]">
+            <div class="p-4 border-b border-slate-50 bg-slate-50/50">
+                <h4 class="text-[11px] font-black text-rose-600 uppercase italic">3. Thời gian & Áp dụng</h4>
+            </div>
+            <div class="p-6 flex flex-col justify-between h-full">
+                <div class="space-y-6">
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <label class="text-[10px] font-black text-slate-400 uppercase block mb-2">Khoảng thời gian</label>
+                        <div class="space-y-3">
+                            <div>
+                                <span class="text-[9px] font-bold text-slate-400 ml-1">TỪ NGÀY</span>
+                                <input type="date" id="schedFromDate" class="w-full border-none bg-white p-3 rounded-xl font-bold text-xs mt-1 shadow-sm outline-none focus:ring-2 focus:ring-rose-500/20">
+                            </div>
+                            <div>
+                                <span class="text-[9px] font-bold text-slate-400 ml-1">ĐẾN NGÀY</span>
+                                <input type="date" id="schedToDate" class="w-full border-none bg-white p-3 rounded-xl font-bold text-xs mt-1 shadow-sm outline-none focus:ring-2 focus:ring-rose-500/20">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                        <p class="text-[10px] text-blue-600 font-medium italic">
+                            <i class="fas fa-info-circle mr-1"></i> Mẹo: Chọn khoảng cách 7 ngày để áp lịch nhanh theo tuần, hoặc 30 ngày cho cả tháng.
+                        </p>
+                    </div>
+                </div>
+                
+                <button onclick="saveBulkSchedule()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[24px] shadow-2xl shadow-slate-200 hover:bg-black transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3">
+                    <i class="fas fa-calendar-check"></i> XÁC NHẬN ÁP LỊCH TRÌNH
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <div class="p-6 border-b border-slate-50 flex justify-between items-center bg-white sticky top-0 z-10">
+            <h3 class="font-black text-slate-800 uppercase italic tracking-tighter">Danh sách phân ca hệ thống</h3>
+            <div class="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border">
+                <span class="text-[10px] font-black text-slate-400 ml-3">XEM NGÀY:</span>
+                <input type="date" id="viewSchedDate" onchange="loadScheduleTable()" class="bg-white border-none p-2 rounded-xl text-xs font-black outline-none shadow-sm">
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="custom-table w-full text-left">
+                <thead>
+                    <tr>
+                        <th class="w-1/4">Nhân viên</th>
+                        <th class="text-center">Ngày áp dụng</th>
+                        <th>Danh sách ca làm</th>
+                        <th class="text-right">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="scheduleListTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+            <div id="leave-approval" class="tab-content">
+    <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <table class="w-full text-left border-collapse">
+            <thead class="bg-slate-50/50 border-b border-slate-100">
+                <tr class="text-[10px] font-black text-slate-400 uppercase tracking-[2px]">
+                    <th class="p-5">Nhân viên</th>
+                    <th class="p-5">Thời gian nghỉ</th>
+                    <th class="p-5 text-center">Ngày</th>
+                    <th class="p-5">Lý do</th>
+                    <th class="p-5 text-center">Trạng thái</th>
+                    <th class="p-5 text-right">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="leaveApprovalTable">
+                <tr><td colspan="6" class="p-10 text-center text-slate-300 italic text-xs font-bold uppercase">Đang tải dữ liệu...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+            <div id="employee-map" class="tab-content"><div id="map"></div></div>
+            <div id="settings" class="tab-content"><div class="grid grid-cols-2 gap-8"><div class="glass-card p-8"><h3 class="text-lg font-bold mb-6 text-blue-600 uppercase italic tracking-tighter">Thông tin Doanh nghiệp</h3><input type="text" id="cfgCompanyName" class="w-full bg-slate-50 border-2 border-slate-50 p-4 rounded-2xl outline-none mb-4 font-bold text-slate-700"><button onclick="saveCompanySettings()" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold text-xs uppercase">Lưu cấu hình</button></div><div class="glass-card p-8"><h3 class="text-lg font-bold mb-6 text-emerald-600 uppercase italic tracking-tighter">Quản lý Phòng ban</h3><div class="flex gap-2 mb-6"><input type="text" id="newDeptName" placeholder="Tên phòng mới..." class="flex-1 bg-slate-50 border-2 border-slate-50 p-4 rounded-2xl outline-none"><button onclick="addDepartment()" class="bg-emerald-500 text-white px-6 rounded-2xl font-bold uppercase text-xs">Thêm</button></div><div id="deptListUI"></div></div></div><div class="glass-card p-8 mt-8"><div class="flex justify-between items-center mb-6"><h3 class="text-lg font-bold text-rose-600 uppercase italic tracking-tighter">Khu vực vận hành (GPS)</h3><button onclick="toggleModal('locationModal', true)" class="text-rose-600 font-bold text-[10px] uppercase border-2 border-rose-100 px-4 py-1.5 rounded-xl hover:bg-rose-50 transition">+ THÊM ĐIỂM</button></div><div id="locationListUI"></div></div></div>
+
+            <div id="report-attendance" class="tab-content">
+                <div class="bg-white p-8 rounded-[32px] border mb-8 flex items-center justify-between"><div><h3 class="text-xl font-bold uppercase italic tracking-tighter">Báo cáo chấm công chi tiết</h3></div><div class="flex items-center gap-3"><div class="flex items-center gap-2 bg-slate-100 p-2 rounded-2xl border"><input type="date" id="reportDateFrom" class="bg-transparent outline-none font-bold text-xs px-2"><i class="fas fa-arrow-right text-slate-300"></i><input type="date" id="reportDateTo" class="bg-transparent outline-none font-bold text-xs px-2"></div><button onclick="getAttendanceRangeReport()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase shadow-lg shadow-blue-100">TRUY XUẤT</button><button onclick="exportAttendanceToExcel()" class="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase shadow-lg shadow-emerald-100">XUẤT EXCEL</button></div></div>
+                <div class="glass-card overflow-x-auto">
+  <table
+    class="custom-table w-full text-left border-collapse"
+    id="attendanceReportTable"
+  >
+    <thead>
+      <tr class="bg-slate-50/80">
+        <th>Nhân viên</th>
+        <th>Ngày làm việc</th>
+
+        <th class="text-center bg-emerald-50/30">Vào 1</th>
+        <th class="text-center bg-blue-50/30">Ra 1</th>
+
+        <th class="text-center bg-emerald-50/30">Vào 2</th>
+        <th class="text-center bg-blue-50/30">Ra 2</th>
+
+        <th class="text-center bg-emerald-50/30">Vào 3</th>
+        <th class="text-center bg-blue-50/30">Ra 3</th>
+
+        <th class="text-center bg-emerald-50/30">Vào 4</th>
+        <th class="text-center bg-blue-50/30">Ra 4</th>
+
+        <th class="text-right">Ca áp dụng</th>
+      </tr>
+    </thead>
+
+    <tbody id="table-report-attendance"></tbody>
+  </table>
+</div>
+            </div>
+
+            <div id="report-summary" class="tab-content"><div class="flex items-center gap-4 mb-8"><input type="month" id="reportMonthSummary" class="border p-4 rounded-2xl font-bold outline-none shadow-sm"><button onclick="calculateSummaryReport()" class="bg-slate-950 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">KẾT XUẤT LƯƠNG TỔNG HỢP</button></div><div class="glass-card"><table class="custom-table w-full"><thead><tr><th>Nhân viên</th><th class="text-center">Lượt công</th><th class="text-center">Vi phạm</th><th class="text-center">Tổng công</th><th class="text-right">Lương tạm tính</th></tr></thead><tbody id="table-report-summary"></tbody></table></div></div>
+            <div id="report-ot" class="tab-content"><input type="month" id="reportMonthOT" class="border p-4 rounded-2xl mb-8 outline-none"><button onclick="calculateOTReport()" class="bg-orange-500 text-white px-8 py-4 rounded-2xl ml-4 font-black text-xs uppercase shadow-lg shadow-orange-100 italic">Truy xuất tăng ca</button><div class="glass-card"><table class="custom-table w-full"><thead><tr><th>Nhân viên</th><th>Ngày</th><th>Giờ ra thực tế</th><th>Mốc OT</th><th>Số phút</th><th class="text-right">Ca</th></tr></thead><tbody id="table-report-ot"></tbody></table></div></div>
+            <div id="report-late" class="tab-content"><input type="month" id="reportMonthLate" class="border p-4 rounded-2xl mb-8 outline-none"><button onclick="calculateLateEarlyReport()" class="bg-rose-500 text-white px-8 py-4 rounded-2xl ml-4 font-black text-xs uppercase shadow-lg shadow-rose-100 italic">Truy xuất vi phạm</button><div class="glass-card"><table class="custom-table w-full"><thead><tr><th>Nhân viên</th><th>Ngày</th><th class="text-center">Trạng thái</th><th>Số phút</th><th class="text-right">Ca làm</th></tr></thead><tbody id="table-report-late"></tbody></table></div></div>
+        </main>
+    </div>
+
+    <div id="employeeModal" class="modal">
+        <div class="modal-content !w-[850px] !p-0">
+            <div class="p-8 bg-slate-900 text-white flex justify-between items-center"><div><h3 class="text-2xl font-extrabold tracking-tight italic uppercase">Hồ sơ nhân sự</h3><p class="text-slate-400 text-[10px] mt-1 uppercase tracking-widest font-medium">Định danh & Phân quyền vận hành</p></div><button onclick="toggleModal('employeeModal', false)" class="w-10 h-10 rounded-full hover:bg-white/10 transition-all"><i class="fas fa-times"></i></button></div>
+            <div class="p-10 bg-white grid grid-cols-2 gap-x-12 gap-y-6">
+                <div class="space-y-5">
+                    <div><label class="text-[10px] font-bold text-slate-400 uppercase block ml-1 mb-1">ID Nhân viên</label><input type="text" id="nvID" readonly class="w-full bg-slate-50 border-2 border-slate-50 p-4 rounded-2xl font-black text-blue-600 italic"></div>
+                    <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Họ tên nhân viên</label><input type="text" id="nvName" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-blue-500"></div>
+                    <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Số điện thoại</label><input type="text" id="nvPhone" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-500"></div>
+                    <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Email liên hệ</label><input type="email" id="nvEmail" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-500"></div>
+                    <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Địa chỉ</label><input type="text" id="nvAddress" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-500"></div>
+                </div>
+                <div class="space-y-5">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="text-[10px] font-black text-blue-600 uppercase ml-1 block mb-1 italic">Phòng ban</label><select id="nvDepartment" class="w-full bg-blue-50 border-2 border-blue-100 p-3.5 rounded-2xl font-bold text-blue-700 outline-none"></select></div>
+                        <div><label class="text-[10px] font-black text-blue-600 uppercase ml-1 block mb-1 italic">Ngày vào làm</label><input type="date" id="nvJoinDate" class="w-full bg-blue-50 border-2 border-blue-100 p-3.5 rounded-2xl font-bold text-blue-700 outline-none"></div>
+                    </div>
+                    <div><label class="text-[10px] font-black text-blue-600 uppercase ml-1 block mb-1 italic">Vai trò hệ thống</label><select id="nvRole" class="w-full bg-blue-50 border-2 border-blue-100 p-3.5 rounded-2xl font-bold text-blue-700 outline-none"><option value="Staff">Nhân viên</option><option value="Manager">Quản lý</option><option value="Admin">Admin</option></select></div>
+                    <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Mật khẩu App</label><input type="password" id="nvPass" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-500"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1 text-center">Lương/Ca</label><input type="number" id="nvSalary" class="w-full border-2 p-4 rounded-2xl font-black text-center text-slate-700 outline-none"></div>
+                        <div><label class="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1 text-center">Quỹ phép</label><input type="number" id="nvLeave" value="12" class="w-full border-2 p-4 rounded-2xl font-black text-center text-slate-700 outline-none"></div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-slate-200"><div class="flex justify-between items-center mb-2"><label class="text-[10px] font-bold text-slate-400 uppercase">Khóa thiết bị</label><button onclick="resetDevice()" id="btnResetDevice" class="hidden bg-rose-500 text-white text-[9px] px-3 py-1.5 rounded-lg font-black shadow-sm">MỞ KHÓA MÁY</button></div><input type="text" id="nvDevice" readonly placeholder="Chưa liên kết" class="w-full bg-white/50 p-2.5 rounded-xl text-xs font-mono text-center text-slate-400 italic outline-none"></div>
+                </div>
+            </div>
+            <div class="p-8 bg-slate-50 border-t"><button onclick="saveEmployee()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all uppercase tracking-widest text-sm italic">Lưu hồ sơ nhân viên</button></div>
+        </div>
+    </div>
+
+    <div id="shiftModal" class="modal">
+        <div class="modal-content !w-[1100px] !p-0 overflow-hidden shadow-2xl border-none">
+            <div class="p-5 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800"><div><h3 class="text-lg font-bold tracking-tighter uppercase italic">Thiết lập tham số ca</h3><p class="text-[9px] text-slate-400 uppercase tracking-widest mt-1">Cấu hình khung giờ & Hệ số vận hành</p></div><button onclick="toggleModal('shiftModal', false)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-all"><i class="fas fa-times"></i></button></div>
+            <div class="p-8 bg-white grid grid-cols-3 gap-10">
+                <div class="space-y-6">
+                    <div class="flex items-center gap-2 border-b pb-2"><i class="fas fa-clock text-blue-600 text-sm"></i><h4 class="text-[11px] font-black text-slate-700 uppercase italic">1. Khung giờ chuẩn</h4></div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Mã ca</label><input type="text" id="shiftCode" placeholder="Mã ca" class="w-full border-2 border-slate-100 rounded-xl p-2.5 font-black text-blue-600 text-xs outline-none"></div>
+                        <div><label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Tên ca</label><input type="text" id="shiftName" placeholder="Tên ca" class="w-full border-2 border-slate-100 rounded-xl p-2.5 font-bold text-xs text-slate-700 outline-none"></div>
+                    </div>
+                    <div class="bg-blue-50/30 p-5 rounded-[24px] border border-blue-100">
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div><label class="text-[9px] font-black text-blue-500 uppercase block mb-1 text-center italic">Giờ Vào</label><input type="time" id="startShift" class="w-full border-2 border-white rounded-xl p-2.5 font-black text-slate-700 text-center shadow-sm"></div>
+                            <div><label class="text-[9px] font-black text-blue-500 uppercase block mb-1 text-center italic">Giờ Ra</label><input type="time" id="endShift" class="w-full border-2 border-white rounded-xl p-2.5 font-black text-slate-700 text-center shadow-sm"></div>
+                        </div>
+                        <div class="flex items-center gap-2 justify-center pt-2 border-t border-blue-100/50"><input type="checkbox" id="isOvernight" class="w-4 h-4 accent-blue-600"><label for="isOvernight" class="text-[10px] font-black text-slate-600 uppercase">Ca qua đêm (+24h)</label></div>
+                    </div>
+                    <div><label class="text-[9px] font-black text-slate-400 uppercase block mb-2 italic">Địa điểm áp dụng</label><div id="locationCheckboxGroup" class="w-full border-2 border-slate-50 rounded-2xl p-4 bg-slate-50/50 max-h-40 overflow-y-auto space-y-2"></div></div>
+                </div>
+                <div class="space-y-6 border-x px-10">
+                    <div class="flex items-center gap-2 border-b pb-2"><i class="fas fa-fingerprint text-emerald-600 text-sm"></i><h4 class="text-[11px] font-black text-slate-700 uppercase italic">2. Quy tắc quẹt</h4></div>
+                    <div><label class="text-[9px] font-black text-emerald-600 uppercase block mb-2 italic">Chế độ quẹt thẻ</label><select id="checkCount" class="w-full bg-emerald-50/30 border-2 border-emerald-100 p-3 rounded-2xl font-black text-emerald-700 text-xs outline-none cursor-pointer"><option value="2">2 lần (Vào - Ra)</option><option value="4">4 lần (Nghỉ trưa)</option></select></div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100"><span>Đi trễ</span><div class="flex items-center gap-1"><input type="number" id="lateGrace" value="5" class="w-10 bg-transparent text-center font-black text-rose-600 text-xs"> <span class="text-[8px] text-slate-400">p</span></div></div>
+                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100"><span>Về sớm</span><div class="flex items-center gap-1"><input type="number" id="earlyGrace" value="5" class="w-10 bg-transparent text-center font-black text-rose-600 text-xs"> <span class="text-[8px] text-slate-400">p</span></div></div>
+                    </div>
+                    <input type="checkbox" id="lateGraceActive" checked class="hidden"><input type="checkbox" id="earlyGraceActive" checked class="hidden">
+                    <div class="bg-slate-950 p-5 rounded-[24px] shadow-xl space-y-4">
+                        <p class="text-[9px] font-black text-white/40 uppercase text-center tracking-widest">Dải nhận diện ca</p>
+                        <div class="grid grid-cols-2 gap-2"><input type="time" id="detectInStart" class="bg-white/10 border-none rounded-lg p-2 text-[10px] text-white font-bold text-center outline-none"><input type="time" id="detectInEnd" class="bg-white/10 border-none rounded-lg p-2 text-[10px] text-white font-bold text-center outline-none"></div>
+                        <div class="grid grid-cols-2 gap-2"><input type="time" id="detectOutStart" class="bg-white/10 border-none rounded-lg p-2 text-[10px] text-white font-bold text-center outline-none"><input type="time" id="detectOutEnd" class="bg-white/10 border-none rounded-lg p-2 text-[10px] text-white font-bold text-center outline-none"></div>
+                    </div>
+                </div>
+                <div class="space-y-6">
+                    <div class="flex items-center gap-2 border-b pb-2"><i class="fas fa-bolt text-orange-600 text-sm"></i><h4 class="text-[11px] font-black text-slate-700 uppercase italic">3. Tăng ca & Hệ số</h4></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-white border-2 border-slate-50 p-3 rounded-2xl shadow-sm text-center"><label class="text-[8px] font-black text-slate-400 uppercase block mb-1">Công</label><input type="number" step="0.1" id="workCount" value="1" class="w-full text-lg font-black text-blue-600 text-center outline-none"></div>
+                        <div class="bg-white border-2 border-slate-50 p-3 rounded-2xl shadow-sm text-center"><label class="text-[8px] font-black text-slate-400 uppercase block mb-1">Tổng giờ</label><input type="number" id="totalHours" value="8" class="w-full text-lg font-black text-blue-600 text-center outline-none"></div>
+                    </div>
+                    <div class="bg-orange-50/50 p-5 rounded-[24px] border border-orange-100 flex items-center justify-between shadow-sm shadow-orange-50"><div class="flex items-center gap-3"><input type="checkbox" id="otAfterActive" class="w-5 h-5 accent-orange-500"><span class="text-[10px] font-black text-slate-700 uppercase">Tăng ca sau ca</span></div><div class="flex items-center gap-1"><input type="number" id="otAfterMins" value="30" class="w-12 bg-white border border-orange-200 rounded-xl p-2 text-center font-black text-orange-600 text-xs"> <span class="text-[8px] text-orange-400">p</span></div></div>
+                    <div class="bg-slate-900 p-5 rounded-[24px] shadow-2xl">
+                        <p class="text-[9px] font-black text-orange-400 uppercase text-center mb-4 tracking-tighter">Hệ số lương OT</p>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="text-center"><label class="text-[7px] text-slate-500 uppercase block mb-1">Ngày Thường</label><input type="number" id="otNormal" value="1.5" class="w-full bg-white/10 rounded-lg p-2 text-[10px] font-black text-white text-center outline-none"></div>
+                            <div class="text-center"><label class="text-[7px] text-slate-500 uppercase block mb-1">Cuối Tuần</label><input type="number" id="otWeekend" value="2.0" class="w-full bg-white/10 rounded-lg p-2 text-[10px] font-black text-white text-center outline-none"></div>
+                            <div class="text-center"><label class="text-[7px] text-slate-500 uppercase block mb-1">Ngày Lễ</label><input type="number" id="otHoliday" value="3.0" class="w-full bg-white/10 rounded-lg p-2 text-[10px] font-black text-orange-400 text-center outline-none"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="px-10 py-6 bg-slate-50 border-t flex gap-6"><button onclick="toggleModal('shiftModal', false)" class="px-8 font-black text-slate-400 text-[10px] uppercase tracking-widest hover:text-slate-600 transition-all">Hủy bỏ</button><button onclick="saveNewShift()" class="flex-1 bg-blue-600 text-white font-black py-4 rounded-2xl uppercase text-[11px] tracking-widest shadow-xl shadow-blue-100 italic hover:bg-blue-700 transition-all">Lưu tham số vận hành ca</button></div>
+        </div>
+    </div>
+
+    <div id="locationModal" class="modal"><div class="modal-content !w-[500px] !p-0"><div class="p-6 bg-slate-900 text-white flex justify-between items-center"><b class="uppercase italic">Địa điểm chấm công</b><button onclick="toggleModal('locationModal', false)"><i class="fas fa-times"></i></button></div><div class="p-8 space-y-4"><input type="text" id="locName" placeholder="Tên văn phòng/sân bóng" class="w-full border-2 rounded-2xl p-4 outline-none font-bold"><input type="text" id="locCoords" placeholder="Tọa độ GPS (Lat, Lon)" class="w-full border-2 rounded-2xl p-4 outline-none font-mono font-bold"><button onclick="saveLocation()" class="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-lg uppercase italic tracking-widest">Lưu tọa độ thực tế</button></div></div></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="js/admin-logic.js"></script>
+    
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const CID = urlParams.get('id') ? urlParams.get('id').toLowerCase() : 'homestech';
+        document.getElementById('displayCID').innerText = "COMPANY ID: " + CID;
+        document.getElementById('subTitleCID').innerText = "VẬN HÀNH DOANH NGHIỆP: " + CID.toUpperCase();
+
+        async function handleAdminLogin() {
+            const userInput = document.getElementById('adminUser').value;
+            const passInput = document.getElementById('adminPass').value;
+
+            if (userInput === 'homestech' && passInput === 'Homestechcc@2026') {
+                proceedToDashboard("SUPER ADMIN");
+                return;
+            }
+
+            try {
+                const { db } = await import('./js/firebase-config.js');
+                const { ref, get } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js");
+                const userRef = ref(db, `COMPANIES/${CID}/users/${userInput}`);
+                const snap = await get(userRef);
+                if (snap.exists()) {
+                    const u = snap.val();
+                    if (u.password === passInput && (u.role === 'Admin' || u.role === 'Manager')) {
+                        proceedToDashboard(u.name);
+                    } else { alert("Sai mật khẩu hoặc tài khoản không có quyền Quản trị!"); }
+                } else { alert("Tài khoản không tồn tại trong hệ thống " + CID); }
+            } catch (e) { alert("Lỗi kết nối Firebase: " + e.message); }
+        }
+
+        function proceedToDashboard(adminName) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainDashboard').classList.remove('hidden');
+            document.getElementById('adminNameDisplay').innerText = adminName;
+        }
+
+        function showTab(tabId, el) {
+    document.querySelectorAll('.sidebar-item').forEach(btn => {
+        btn.classList.remove('active');
+        btn.classList.add('text-slate-300');
+    });
+    if(el) {
+        el.classList.add('active');
+        el.classList.remove('text-slate-300');
+    }
+    const titles = {
+        'dashboard': 'NHẬT KÝ CHẤM CÔNG',
+        'employees': 'NHÂN VIÊN HỆ THỐNG',
+        'shifts': 'QUẢN LÝ CA LÀM VIỆC',
+        'schedule': 'PHÂN CA LÀM VIỆC',
+        'leave-approval': 'PHÊ DUYỆT NGHỈ PHÉP',
+        'employee-map': 'BẢN ĐỒ REALTIME',
+        'settings': 'CẤU HÌNH DOANH NGHIỆP',
+        'report-attendance': 'BÁO CÁO VÀO - RA',
+        'report-summary': 'BẢNG LƯƠNG TỔNG HỢP'
+    };
+    if(titles[tabId]) document.getElementById('pageTitle').innerText = titles[tabId];
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active-content'));
+    document.getElementById(tabId).classList.add('active-content');
+
+    // --- BỔ SUNG LOGIC TẢI DỮ LIỆU TẠI ĐÂY ---
+
+    // 1. Nếu nhấn vào tab Phê duyệt nghỉ phép -> Gọi hàm tải dữ liệu từ mobile
+    if (tabId === 'leave-approval') {
+        if (window.loadLeaveApprovals) {
+            window.loadLeaveApprovals();
+        } else {
+            console.error("Chưa tìm thấy hàm loadLeaveApprovals trong admin-logic.js");
+        }
+    }
+
+    // 2. Logic bản đồ cũ của bạn
+    if (tabId === 'employee-map') {
+        setTimeout(() => { 
+            if (window.initMap) window.initMap();
+            if (window.map) window.map.invalidateSize();
+        }, 300);
+    }
+}
+
+        function toggleSubMenu(id) {
+            const sub = document.getElementById(id);
+            const icon = document.getElementById('icon-' + id);
+            sub.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        }
+
+        function toggleModal(modalId, show) {
+            document.getElementById(modalId).style.display = show ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>

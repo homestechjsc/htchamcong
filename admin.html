@@ -67,6 +67,7 @@
         </div>
     </div>
 
+    
     <div id="mainDashboard" class="hidden w-full flex">
         <aside class="w-80 bg-slate-950 text-white flex-shrink-0 flex flex-col sticky top-0 h-screen">
             <div class="p-10 text-center">
@@ -79,7 +80,7 @@
 
             <nav class="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
                 <button onclick="showTab('dashboard', this)" class="sidebar-item active w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all">
-                    <i class="fas fa-chart-pie mr-4 opacity-70"></i> Nhật ký Realtime
+                    <i class="fas fa-chart-pie mr-4 opacity-70"></i> Dashboard
                 </button>
                 <button onclick="showTab('employees', this)" class="sidebar-item w-[calc(100%-32px)] flex items-center py-3 px-6 font-semibold transition-all text-slate-300">
                     <i class="fas fa-user-friends mr-4 opacity-70"></i> Quản lý nhân viên
@@ -109,6 +110,8 @@
                         <button onclick="showTab('report-ot', this)" class="w-full text-left py-2.5 px-8 text-slate-400 hover:text-white">Báo cáo Tăng ca</button>
                         <button onclick="showTab('report-late', this)" class="w-full text-left py-2.5 px-8 text-slate-400 hover:text-white">Báo cáo Trễ/Sớm</button>
                         <button onclick="showTab('report-summary', this)" class="w-full text-left py-2.5 px-8 text-blue-400 hover:text-white">Báo cáo Tổng hợp</button>
+                        <button onclick="showTab('salary-settings', this)" class="w-full text-left py-2.5 px-8 text-orange-400 hover:text-white italic">Cài đặt tham số lương</button>
+                        <button onclick="showTab('salary-calculation', this)" class="w-full text-left py-2.5 px-8 text-emerald-400 hover:text-white font-black">Bảng tính lương chi tiết</button>
                     </div>
                 </div>
 
@@ -136,8 +139,62 @@
             </div>
 
             <div id="dashboard" class="tab-content active-content">
-                <div class="glass-card"><table class="custom-table w-full text-left"><thead><tr><th>Nhân viên</th><th>Thời gian</th><th>Ca làm việc</th><th>Trạng thái</th><th class="text-right">Khoảng cách</th></tr></thead><tbody id="attendanceTable"></tbody></table></div>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div class="glass-card p-5 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
+            <p class="text-[10px] font-black uppercase opacity-70 tracking-widest">Tổng nhân sự</p>
+            <h3 id="db-total-staff" class="text-3xl font-black mt-2">0</h3>
+        </div>
+        <div class="glass-card p-5 bg-white border-emerald-100">
+            <p class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Đã chấm công</p>
+            <h3 id="db-present" class="text-3xl font-black text-slate-800 mt-2">0</h3>
+        </div>
+        <div class="glass-card p-5 bg-white border-slate-100">
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chưa vào ca</p>
+            <h3 id="db-absent" class="text-3xl font-black text-slate-800 mt-2">0</h3>
+        </div>
+        <div class="glass-card p-5 bg-white border-orange-100">
+            <p class="text-[10px] font-black text-orange-500 uppercase tracking-widest">Đi trễ</p>
+            <h3 id="db-late" class="text-3xl font-black text-slate-800 mt-2">0</h3>
+        </div>
+        <div class="glass-card p-5 bg-white border-rose-100">
+            <p class="text-[10px] font-black text-rose-500 uppercase tracking-widest">Về sớm</p>
+            <h3 id="db-early" class="text-3xl font-black text-slate-800 mt-2">0</h3>
+        </div>
+        <div class="glass-card p-5 bg-slate-900 border-none text-white">
+            <p class="text-[10px] font-black text-blue-400 uppercase tracking-widest">Đúng giờ %</p>
+            <h3 id="db-ontime-rate" class="text-3xl font-black mt-2">0%</h3>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-1 glass-card p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h4 class="text-xs font-black uppercase italic tracking-tighter flex items-center gap-2">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    Trạng thái nhân sự hiện tại
+                </h4>
+                <span class="text-[9px] font-bold text-slate-400 uppercase" id="db-last-update">Cập nhật: --:--</span>
             </div>
+            <div id="db-realtime-list" class="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                </div>
+        </div>
+
+        <div class="lg:col-span-2 glass-card p-6">
+            <h4 class="text-xs font-black uppercase italic tracking-tighter mb-8">Biểu đồ mật độ chấm công theo khung giờ</h4>
+            <div id="checkin-chart-container" class="h-64 flex items-end justify-between gap-2 px-4 border-b border-slate-100 pb-2">
+                </div>
+            <div class="flex justify-between mt-4 text-[9px] font-black text-slate-300 uppercase px-2">
+                <span>06:00</span><span>08:00</span><span>10:00</span><span>12:00</span><span>14:00</span><span>16:00</span><span>18:00</span><span>20:00</span>
+            </div>
+            
+            <div class="mt-10 p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <p class="text-[10px] font-bold text-slate-400 italic text-center">
+                    <i class="fas fa-info-circle mr-1"></i> Dashboard tự động làm mới mỗi khi có nhân viên quẹt thẻ thành công.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
 
             <div id="employees" class="tab-content">
                 <div class="flex justify-between items-center mb-6"><h3 class="text-lg font-bold text-slate-800 uppercase italic">Cơ sở dữ liệu nhân sự</h3><button onclick="toggleModal('employeeModal', true)" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 uppercase text-xs">+ Thêm nhân viên</button></div>
@@ -293,9 +350,60 @@
             <div id="report-summary" class="tab-content"><div class="flex items-center gap-4 mb-8"><input type="month" id="reportMonthSummary" class="border p-4 rounded-2xl font-bold outline-none shadow-sm"><button onclick="calculateSummaryReport()" class="bg-slate-950 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">KẾT XUẤT LƯƠNG TỔNG HỢP</button></div><div class="glass-card"><table class="custom-table w-full"><thead><tr><th>Nhân viên</th><th class="text-center">Lượt công</th><th class="text-center">Vi phạm</th><th class="text-center">Tổng công</th><th class="text-right">Lương tạm tính</th></tr></thead><tbody id="table-report-summary"></tbody></table></div></div>
             <div id="report-ot" class="tab-content"><input type="month" id="reportMonthOT" class="border p-4 rounded-2xl mb-8 outline-none"><button onclick="calculateOTReport()" class="bg-orange-500 text-white px-8 py-4 rounded-2xl ml-4 font-black text-xs uppercase shadow-lg shadow-orange-100 italic">Truy xuất tăng ca</button><div class="glass-card"><table class="custom-table w-full"><thead><tr><th>Nhân viên</th><th>Ngày</th><th>Giờ ra thực tế</th><th>Mốc OT</th><th>Số phút</th><th class="text-right">Ca</th></tr></thead><tbody id="table-report-ot"></tbody></table></div></div>
             <div id="report-late" class="tab-content"><input type="month" id="reportMonthLate" class="border p-4 rounded-2xl mb-8 outline-none"><button onclick="calculateLateEarlyReport()" class="bg-rose-500 text-white px-8 py-4 rounded-2xl ml-4 font-black text-xs uppercase shadow-lg shadow-rose-100 italic">Truy xuất vi phạm</button><div class="glass-card"><table class="custom-table w-full"><thead><tr><th>Nhân viên</th><th>Ngày</th><th class="text-center">Trạng thái</th><th>Số phút</th><th class="text-right">Ca làm</th></tr></thead><tbody id="table-report-late"></tbody></table></div></div>
+
+            <div id="salary-settings" class="tab-content bg-white rounded-3xl shadow-sm p-8">
+    <h2 class="text-xl font-black mb-6 uppercase italic text-slate-800">Cấu hình công thức tính lương hệ thống</h2>
+    <div class="grid grid-cols-2 gap-8">
+        <div class="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <label class="block text-[10px] font-black text-slate-400 mb-2 uppercase">Hệ số tăng ca (OT)</label>
+            <input type="number" id="cfg_ot_rate" step="0.1" class="w-full p-4 border-2 rounded-2xl font-black text-blue-600 outline-none focus:border-blue-500" placeholder="1.5">
+            <p class="text-[9px] text-slate-400 mt-2 italic">* Lương 1 phút OT = (Lương ca / 8 / 60) x Hệ số này</p>
+        </div>
+        <div class="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <label class="block text-[10px] font-black text-slate-400 mb-2 uppercase">Phần trăm Bảo hiểm (%)</label>
+            <input type="number" id="cfg_insurance_rate" step="0.1" class="w-full p-4 border-2 rounded-2xl font-black text-rose-500 outline-none focus:border-rose-500" placeholder="10.5">
+        </div>
+        <div class="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <label class="block text-[10px] font-black text-slate-400 mb-2 uppercase">Mức giảm trừ gia cảnh (VNĐ)</label>
+            <input type="number" id="cfg_tax_free" class="w-full p-4 border-2 rounded-2xl font-black text-slate-700 outline-none" placeholder="11000000">
+        </div>
+        <div class="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <label class="block text-[10px] font-black text-slate-400 mb-2 uppercase">Số giờ làm chuẩn/ca (Giờ)</label>
+            <input type="number" id="cfg_standard_hours" class="w-full p-4 border-2 rounded-2xl font-black text-slate-700 outline-none" placeholder="8">
+        </div>
+    </div>
+    <button onclick="saveSalarySettings()" class="mt-8 bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all">Lưu cấu hình vận hành lương</button>
+</div>
+
+<div id="salary-calculation" class="tab-content bg-white rounded-3xl shadow-sm p-6">
+    <div class="flex items-end gap-4 mb-8 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+        <div class="flex-1 max-w-xs">
+            <label class="block text-[10px] font-black text-slate-400 mb-2 uppercase">Chọn kỳ tính lương</label>
+            <input type="month" id="salaryMonth" class="w-full p-3 border-2 rounded-xl font-black text-slate-700 outline-none focus:border-blue-500">
+        </div>
+        <button onclick="calculateDetailedSalary()" class="bg-blue-600 text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase shadow-lg shadow-blue-100">Kết xuất bảng lương</button>
+        <button onclick="exportSalaryToExcel()" class="bg-emerald-600 text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase shadow-lg shadow-emerald-100">Xuất báo cáo tài chính</button>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-left custom-table">
+            <thead>
+                <tr class="bg-slate-900 text-white">
+                    <th class="p-4 rounded-tl-xl">Nhân Viên</th>
+                    <th class="p-4 text-center">Công & OT</th>
+                    <th class="p-4 text-center">Phạt Trễ/Sớm</th>
+                    <th class="p-4 text-center">Thưởng/Phụ cấp</th>
+                    <th class="p-4 text-center">Khấu trừ BH/Thuế</th>
+                    <th class="p-4 text-right rounded-tr-xl">Thực Nhận (Net)</th>
+                </tr>
+            </thead>
+            <tbody id="table-salary-body"></tbody>
+        </table>
+    </div>
+</div>
         </main>
     </div>
 
+      
     <div id="employeeModal" class="modal">
         <div class="modal-content !w-[850px] !p-0">
             <div class="p-8 bg-slate-900 text-white flex justify-between items-center"><div><h3 class="text-2xl font-extrabold tracking-tight italic uppercase">Hồ sơ nhân sự</h3><p class="text-slate-400 text-[10px] mt-1 uppercase tracking-widest font-medium">Định danh & Phân quyền vận hành</p></div><button onclick="toggleModal('employeeModal', false)" class="w-10 h-10 rounded-full hover:bg-white/10 transition-all"><i class="fas fa-times"></i></button></div>

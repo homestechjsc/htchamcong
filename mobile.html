@@ -131,6 +131,16 @@ html, body {
 .tab-content::-webkit-scrollbar {
     display: none;
 }
+
+body {
+    background-color: #ffffff; /* Đảm bảo nền body là trắng */
+    /* Tránh nội dung bị dính vào tai thỏ iPhone */
+    padding-top: env(safe-area-inset-top); 
+}
+
+#tab-attendance, .tab-content {
+    background-color: #ffffff;
+}
     </style>
 </head>
 <body>
@@ -192,7 +202,7 @@ html, body {
     </div>
 </div>
 
-       <div id="tab-leave" class="tab-content">
+       <div id="tab-leave" class="tab-content p-6">
     <div id="leaveFormPopup" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end">
         <div class="bg-white w-full rounded-t-[40px] p-8 animate-slide-up">
             <div class="flex justify-between items-center mb-6">
@@ -261,7 +271,7 @@ html, body {
     </div>
 </div>
 
-        <div id="tab-history" class="tab-content">
+        <div id="tab-history" class="tab-content p-6">
     <h3 class="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest text-center italic">Tra cứu lịch sử</h3>
     
     <div class="bg-white p-4 rounded-3xl border border-slate-50 shadow-sm mb-6 space-y-3">
@@ -282,7 +292,7 @@ html, body {
         </div>
 </div>
 
-        <div id="tab-calendar" class="tab-content">
+        <div id="tab-calendar" class="tab-content p-6">
     <div class="flex justify-between items-center mb-6 px-2">
         <button onclick="changeCalendarMonth(-1)" class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 active:scale-90 transition-all">
             <i class="fas fa-chevron-left text-xs"></i>
@@ -315,7 +325,7 @@ html, body {
     </div>
 </div>
 
-        <div id="tab-profile" class="tab-content">
+        <div id="tab-profile" class="tab-content ">
     <div class="bg-white pt-16 pb-8 flex flex-col items-center rounded-b-[40px] shadow-sm border-b border-slate-100">
         <div class="relative">
             <div class="w-28 h-28 rounded-full bg-slate-100 border-4 border-white shadow-xl mb-4 overflow-hidden flex items-center justify-center">

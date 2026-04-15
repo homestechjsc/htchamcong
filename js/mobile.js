@@ -1,6 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, push, onValue, query, orderByChild, equalTo, remove } 
 from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getMessaging, getToken, onMessage } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
 
 // --- 1. CẤU HÌNH FIREBASE ---
 const firebaseConfig = {
@@ -15,10 +17,42 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-
+const messaging = getMessaging(app);
 let currentUser = null;
 let attendHistory = [];
 let currentCalendarDate = new Date(); // Dùng để quản lý tháng đang xem trong Bảng công
+
+async function initPushNotification() {
+    try {
+        const permission = await Notification.requestPermission();
+
+        if (permission !== "granted") {
+            console.log("❌ Không được cấp quyền notification");
+            return;
+        }
+
+        const token = await getToken(messaging, {
+            vapidKey: "SVrn01VsilAdVo1yKZG7ZNxgFH53tOz0XpgagILmXEc"
+        });
+
+        if (token) {
+            console.log("✅ FCM TOKEN:", token);
+
+            if (currentUser) {
+                await update(
+                    ref(db, `COMPANIES/${currentUser.cid}/users/${currentUser.id}`),
+                    { fcmToken: token }
+                );
+            }
+
+        } else {
+            console.log("❌ Không lấy được token");
+        }
+
+    } catch (err) {
+        console.error("🔥 Lỗi FCM:", err);
+    }
+}
 
 // --- 2. UTILS ---
 const timeToMins = (t) => {
@@ -97,6 +131,7 @@ window.handleLogin = async () => {
             // Thiết lập biến toàn cục và khởi chạy giao diện
             currentUser = userSession;
             initDashboard();
+            initPushNotification();
             
         } else {
             alert("Tài khoản không tồn tại!");

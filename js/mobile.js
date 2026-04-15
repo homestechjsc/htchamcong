@@ -63,25 +63,44 @@ window.handleLogin = async () => {
             const userData = snap.val();
             if (userData.password !== passInput) return alert("Sai mật khẩu!");
 
+            // 1. Lấy hoặc tạo mã Token thiết bị hiện tại trên điện thoại
             let localToken = localStorage.getItem('HT_DEVICE_TOKEN');
             if (!localToken) {
                 localToken = 'PWA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
                 localStorage.setItem('HT_DEVICE_TOKEN', localToken);
             }
 
-            const cloudToken = userData.deviceId || userData.deviceID;
-            if (!cloudToken) {
-                await update(userRef, { deviceId: localToken });
+            // 2. Kiểm tra mã Token trên Cloud (Kiểm tra cả 2 trường deviceId và deviceID)
+            const cloudToken = (userData.deviceId || userData.deviceID || "").toString();
+
+            // 3. Logic Đăng nhập & Khóa thiết bị
+            // Cho phép đăng nhập nếu: 
+            // - Chưa có Token trên cloud 
+            // - Hoặc Token là chuỗi thông báo "mở khóa" của admin
+            // - Hoặc Token là chuỗi rỗng
+            const isUnlocked = !cloudToken || cloudToken === "" || cloudToken.includes("mở khóa");
+
+            if (isUnlocked) {
+                // Tiến hành liên kết thiết bị mới: cập nhật cả 2 trường để đồng bộ tuyệt đối
+                await update(userRef, { 
+                    deviceId: localToken,
+                    deviceID: localToken 
+                });
             } else if (cloudToken !== localToken) {
+                // Nếu đã có mã khác và không khớp mã máy hiện tại
                 return alert("Thiết bị không hợp lệ. Vui lòng liên hệ Admin!");
             }
 
+            // Đăng nhập thành công
             currentUser = { ...userData, cid: cidInput };
             initDashboard();
         } else {
             alert("Tài khoản không tồn tại!");
         }
-    } catch (e) { alert("Lỗi kết nối Firebase!"); }
+    } catch (e) { 
+        console.error(e);
+        alert("Lỗi kết nối hệ thống!"); 
+    }
 };
 
 // --- 5. CHẤM CÔNG (GIỮ NGUYÊN) ---

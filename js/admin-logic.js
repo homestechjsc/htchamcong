@@ -551,18 +551,21 @@ window.resetDevice = async () => {
     const userId = document.getElementById('nvID').value;
     if (!userId) return;
 
-    if (confirm(`Xác nhận mở khóa thiết bị cho nhân viên #${userId}?\nSau khi mở, nhân viên có thể đăng nhập trên điện thoại mới.`)) {
+    if (confirm(`Xác nhận mở khóa thiết bị cho nhân viên #${userId}?\nNhân viên có thể đăng nhập trên máy mới sau khi reset.`)) {
         try {
-            // Thực hiện cập nhật deviceId về rỗng trên Firebase
+            // Sửa tại đây: Xóa cả 2 loại trường ID thiết bị để đồng bộ
             await update(ref(db, getCompRef('users/' + userId)), {
-                deviceId: "" 
+                deviceId: "",
+                deviceID: "" 
             });
 
-            // Cập nhật UI ngay lập tức
-            document.getElementById('nvDevice').value = "Đã mở khóa thành công";
-            document.getElementById('btnResetDevice').classList.add('hidden');
+            // Cập nhật UI admin
+            document.getElementById('nvDevice').value = "Đã giải phóng thiết bị";
+            if (document.getElementById('btnResetDevice')) {
+                document.getElementById('btnResetDevice').classList.add('hidden');
+            }
             
-            alert("Đã giải phóng thiết bị!");
+            alert("Mở khóa thành công! Nhân viên có thể đăng nhập ngay.");
         } catch (e) {
             console.error(e);
             alert("Lỗi khi mở khóa: " + e.message);

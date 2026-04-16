@@ -25,30 +25,19 @@ let currentCalendarDate = new Date(); // Dùng để quản lý tháng đang xem
 async function initPushNotification() {
     try {
         const permission = await Notification.requestPermission();
-
-        if (permission !== "granted") {
-            console.log("❌ Không được cấp quyền notification");
-            return;
-        }
+        if (permission !== "granted") return;
 
         const token = await getToken(messaging, {
             vapidKey: "SVrn01VsilAdVo1yKZG7ZNxgFH53tOz0XpgagILmXEc"
         });
 
-        if (token) {
+        if (token && currentUser) {
             console.log("✅ FCM TOKEN:", token);
-
-            if (currentUser) {
-                await update(
-                    ref(db, `COMPANIES/${currentUser.cid}/users/${currentUser.id}`),
-                    { fcmToken: token }
-                );
-            }
-
-        } else {
-            console.log("❌ Không lấy được token");
+            // Sửa đường dẫn: Bỏ COMPANIES/[CID] vì Database của bạn lưu users ở gốc
+            const userRef = ref(db, `users/${currentUser.id}`);
+            await update(userRef, { fcmToken: token });
+            console.log("🚀 Đã lưu fcmToken cho nhân viên:", currentUser.id);
         }
-
     } catch (err) {
         console.error("🔥 Lỗi FCM:", err);
     }
@@ -245,8 +234,11 @@ window.addEventListener('load', () => {
     if (savedSession) {
         try {
             currentUser = JSON.parse(savedSession);
-            // Gọi hàm khởi tạo giao diện ngay lập tức
+            // 1. Khởi tạo giao diện
             initDashboard();
+            
+            // 2. 🔥 QUAN TRỌNG: Tự động kiểm tra và lấy FCM Token khi vào App
+            initPushNotification(); 
         } catch (e) {
             localStorage.removeItem('HT_USER_SESSION');
         }

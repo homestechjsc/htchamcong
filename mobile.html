@@ -161,6 +161,13 @@ body {
 #leaveFormPopup .space-y-4::-webkit-scrollbar {
     display: none;
 }
+.custom-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.custom-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
     </style>
 </head>
 <body>
@@ -224,14 +231,14 @@ body {
 
        <div id="tab-leave" class="tab-content p-6">
     <div id="leaveFormPopup" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end">
-    <div class="bg-white w-full rounded-t-[40px] p-8 animate-slide-up max-h-[90vh] flex flex-col">
+    <div class="bg-white w-full rounded-t-[40px] p-8 animate-slide-up max-h-[92vh] flex flex-col shadow-2xl relative">
         
         <div class="flex justify-between items-center mb-6 flex-shrink-0">
             <h3 class="text-xl font-black text-slate-800 uppercase italic">Đăng ký nghỉ</h3>
             <button onclick="toggleLeaveForm(false)" class="text-slate-300 text-2xl"><i class="fas fa-times-circle"></i></button>
         </div>
         
-        <div class="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-4">
+        <div class="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="text-[9px] font-black text-slate-400 uppercase ml-2">Từ ngày</label>
@@ -270,9 +277,11 @@ body {
                 <span id="tempTotalDays" class="text-sm font-black text-blue-600">1.0 ngày</span>
             </div>
 
-            <button onclick="submitLeaveRequest()" class="w-full bg-blue-500 py-4 rounded-2xl text-white font-black shadow-lg uppercase active:scale-95 transition-transform mb-2">
-                Gửi đơn phê duyệt
-            </button>
+            <div class="pt-2 pb-12"> 
+                <button onclick="submitLeaveRequest()" class="w-full bg-blue-500 py-4 rounded-2xl text-white font-black shadow-lg uppercase active:scale-95 transition-transform">
+                    Gửi đơn phê duyệt
+                </button>
+            </div>
         </div>
     </div>
 </div>

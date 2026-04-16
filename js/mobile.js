@@ -25,7 +25,10 @@ let currentCalendarDate = new Date(); // Dùng để quản lý tháng đang xem
 async function initPushNotification() {
     try {
         const permission = await Notification.requestPermission();
-        if (permission !== "granted") return;
+        if (permission !== "granted") {
+            console.warn("Người dùng từ chối nhận thông báo");
+            return;
+        }
 
         const token = await getToken(messaging, {
             vapidKey: "SVrn01VsilAdVo1yKZG7ZNxgFH53tOz0XpgagILmXEc"
@@ -33,10 +36,17 @@ async function initPushNotification() {
 
         if (token && currentUser) {
             console.log("✅ FCM TOKEN:", token);
-            // Sửa đường dẫn: Bỏ COMPANIES/[CID] vì Database của bạn lưu users ở gốc
-            const userRef = ref(db, `users/${currentUser.id}`);
-            await update(userRef, { fcmToken: token });
-            console.log("🚀 Đã lưu fcmToken cho nhân viên:", currentUser.id);
+            
+            // 🔥 ĐƯỜNG DẪN CHUẨN THEO DATABASE CỦA BẠN
+            // currentUser.cid được lấy từ cidInput lúc đăng nhập
+            const userRef = ref(db, `COMPANIES/${currentUser.cid}/users/${currentUser.id}`);
+            
+            await update(userRef, { 
+                fcmToken: token,
+                lastTokenUpdate: new Date().toISOString() // Thêm ngày cập nhật để dễ theo dõi
+            });
+            
+            console.log("🚀 Đã lưu fcmToken thành công vào thư mục của nhân viên.");
         }
     } catch (err) {
         console.error("🔥 Lỗi FCM:", err);

@@ -1192,40 +1192,66 @@ window.approveLeave = async (key, newStatus) => {
     if (!confirm(`Xác nhận ${newStatus === 'Approved' ? 'DUYỆT' : 'TỪ CHỐI'} đơn này?`)) return;
 
     try {
-        // 1. Lấy dữ liệu chi tiết của đơn nghỉ phép
         const leaveRef = ref(db, getCompRef(`leaveRequests/${key}`));
         const leaveSnap = await get(leaveRef);
-
         if (!leaveSnap.exists()) return alert("Đơn nghỉ không tồn tại!");
         
         const leaveData = leaveSnap.val();
         const userId = leaveData.userId;
         const totalDays = parseFloat(leaveData.totalDays || 0);
 
-        // 2. Nếu là Duyệt (Approved), thực hiện trừ phép trong hồ sơ nhân viên
-        if (newStatus === 'Approved') {
-            const userRef = ref(db, getCompRef(`users/${userId}`));
-            const userSnap = await get(userRef);
+        // 1. Lấy thông tin User để lấy fcmToken thông báo
+        const userRef = ref(db, getCompRef(`users/${userId}`));
+        const userSnap = await get(userRef);
 
-            if (userSnap.exists()) {
-                const currentQuota = parseFloat(userSnap.val().leaveQuota || 0);
-                const newQuota = currentQuota - totalDays;
-
-                // Cập nhật số phép mới vào hồ sơ nhân viên
-                await update(userRef, { leaveQuota: newQuota });
-                console.log(`Đã trừ ${totalDays} ngày phép của nhân viên ${userId}. Số dư mới: ${newQuota}`);
-            }
+        if (newStatus === 'Approved' && userSnap.exists()) {
+            const currentQuota = parseFloat(userSnap.val().leaveQuota || 0);
+            await update(userRef, { leaveQuota: currentQuota - totalDays });
         }
 
-        // 3. Cập nhật trạng thái đơn nghỉ (Duyệt/Từ chối)
+        // 2. Cập nhật trạng thái đơn
         await update(leaveRef, { status: newStatus });
         
-        alert("Thành công: Đã cập nhật trạng thái đơn và khấu trừ quỹ phép!");
+        // 3. GỬI THÔNG BÁO ĐẾN ĐIỆN THOẠI NHÂN VIÊN
+        if (userSnap.exists() && userSnap.val().fcmToken) {
+            const statusVN = newStatus === 'Approved' ? "ĐÃ ĐƯỢC DUYỆT" : "BỊ TỪ CHỐI";
+            sendPushNotification(
+                userSnap.val().fcmToken, 
+                "Cập nhật đơn nghỉ phép", 
+                `Đơn nghỉ ngày ${leaveData.fromDate} của bạn ${statusVN}.`
+            );
+        }
+        
+        alert("Thành công: Đã cập nhật trạng thái đơn!");
     } catch (e) {
-        console.error("Lỗi khi phê duyệt:", e);
+        console.error("Lỗi:", e);
         alert("Lỗi hệ thống: " + e.message);
     }
 };
+
+// Hàm gửi Push thông qua Firebase Cloud Messaging API
+async function sendPushNotification(token, title, body) {
+    const SERVER_KEY = "SVrn01VsilAdVo1yKZG7ZNxgFH53tOz0XpgagILmXEc"; // Lấy trong Project Settings > Cloud Messaging
+    
+    const message = {
+        notification: { title, body },
+        to: token
+    };
+
+    try {
+        await fetch("https://fcm.googleapis.com/fcm/send", {
+            method: "POST",
+            headers: {
+                "Authorization": "key=" + SERVER_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(message)
+        });
+        console.log("✅ Đã gửi thông báo đến nhân viên");
+    } catch (err) {
+        console.error("❌ Lỗi gửi thông báo:", err);
+    }
+}
 
 window.deleteLeaveRequest = async (key) => {
     if (confirm("Xóa vĩnh viễn đơn nghỉ này?")) {

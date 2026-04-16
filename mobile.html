@@ -423,21 +423,16 @@ body {
             </div>
         </nav>
     </div>
-    <script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-		// 🔥 ĐĂNG KÝ SERVICE WORKER
-    if ('serviceWorker' in navigator) {
+    <<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        // CHỈ ĐĂNG KÝ 1 FILE DUY NHẤT để Firebase Messaging hoạt động
         navigator.serviceWorker.register('/firebase-messaging-sw.js')
-            .then(() => console.log("✅ SW OK"))
-            .catch(err => console.error(err));
-    }
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => console.log('HT Attendance PWA: Sẵn sàng!'))
-                .catch(err => console.log('HT Attendance PWA: Lỗi đăng ký', err));
-        });
-    }
-    </script>
+            .then(reg => console.log('✅ HT Attendance PWA: Sẵn sàng!'))
+            .catch(err => console.error('❌ Lỗi đăng ký SW:', err));
+    });
+}
+</script>
     <script type="module" src="js/mobile.js"></script>
 </body>
 </html>
